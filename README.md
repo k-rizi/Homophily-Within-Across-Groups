@@ -1,1 +1,1 @@
-# Weak-and-Strong-Homophily-in-Networks
+# Codes for Weak and Strong Homophily Paper
