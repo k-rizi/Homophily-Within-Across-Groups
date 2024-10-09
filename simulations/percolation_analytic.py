@@ -1,6 +1,7 @@
 import sympy as sp
 import numpy as np
-import math
+import math, os, pickle
+from datetime import datetime
 import matplotlib.pyplot as plt
 from scipy.optimize import minimize
 from scipy.optimize import fsolve
@@ -68,6 +69,7 @@ def F_maximum_entropy(c, h, frac_red):
 
     return F
 
+# Compute the probability of a clique with a given number of red nodes and blue nodes to remain connected after percolation starting at color start_type
 def compute_probability_con_color(dr,db, p_rr, p_bb, p_rb, start_type):
     # Base case
     if dr+db==1:
@@ -90,7 +92,7 @@ def compute_probability_con_color(dr,db, p_rr, p_bb, p_rb, start_type):
 
     return probability
 
-
+# Compute the probability of a clique with a given number of red nodes and blue nodes to remain connected to kr red nodes and kb blue nodes after percolation starting at color start_type
 def compute_probability_con_color_uneq(dr,db,kr,kb, p_rr, p_bb, p_rb, start_type):
     if start_type == 'r':
         i_r = 1
@@ -129,6 +131,7 @@ def clique_perc_avg(k, p_success, p_failure):
         avg  += (i-1)*compute_probability_con_uneq(k, i, p_success, p_failure)
     return avg
 
+# Compue the average number of target_type colored nodes in a clique with dr red and db blue nodes after percolation
 def clique_perc_avg_color(dr,db, p_rr, p_bb, p_rb,start_type, target_type):
     # Compute the average connectivity of a clique after percolation
     avg = 0
@@ -168,6 +171,7 @@ def F_biased(F):
 
 # print(probability)
 
+# progeny matrix of the percolation process
 def B_matrix(F, F2,p_rr, p_bb, p_rb,N, Nr, M1, M2):
     c = len(F)-1
     c2 = len(F2)-1
@@ -228,6 +232,71 @@ def B_matrix(F, F2,p_rr, p_bb, p_rb,N, Nr, M1, M2):
 
     return B
 
+
+#For faster execution, we cache the values of clique_perc_avg_color
+def B_matrix_cached(F, F2,p_rr, p_bb, p_rb,N, Nr, M1, M2,cachesc1,cachesc2):
+    c = len(F)-1
+    c2 = len(F2)-1
+    F_red,F_blue = F_biased(F)
+    F_red2,F_blue2 = F_biased(F2)
+
+    cache_rr1, cache_br1, cache_rb1, cache_bb1 = cachesc1
+    cache_rr2, cache_br2, cache_rb2, cache_bb2 = cachesc2
+    B = sp.ones(2*(c+4),2*(c+4))
+    for i in range(c+1):
+        for j in range(c+1):
+            B[i,j] =M1 /Nr *F_red[j]*cache_rr1[i,c-i]
+    for i in range(c+1,2*(c+1)):
+        for j in range(c+1):
+            B[i,j] =M1 /Nr *F_red[j]*cache_br1[i%(c+1),c-i%(c+1)]
+    for i in range(c+1):
+        for j in range(c+1,2*(c+1)):
+            B[i,j] =M1 /(N-Nr) *F_blue[j%(c+1)]*cache_rb1[i,c-i%(c+1)]
+    for i in range(c+1,2*(c+1)):
+        for j in range(c+1,2*(c+1)):
+            B[i,j] =M1 /(N-Nr) *F_blue[j%(c+1)]*cache_bb1[i%(c+1),c-i%(c+1)]
+
+    for i in range(c+1):
+        for j in range(2*(c+1),2*(c+1)+c2+1):
+            B[i,j] =M2 /Nr *F_red2[j%(c+1)]*cache_rr1[i,c-i]
+    for i in range(c+1):
+        for j in range(2*(c+1)+c2+1,2*(c+1)+2*(c2+1)):
+            B[i,j] =M2 /(N-Nr) *F_blue2[j-2*(c+2)-1]*cache_rb1[i,c-i%(c+1)]
+    for i in range(c+1,2*(c+1)):
+        for j in range(2*(c+1),2*(c+1)+c2+1):
+            B[i,j] =M2 /Nr *F_red2[j-2*(c+1)]*cache_br1[i%(c+1),c-i%(c+1)]
+    for i in range(c+1,2*(c+1)):
+        for j in range(2*(c+1)+c2+1,2*(c+1)+2*(c2+1)):
+            B[i,j] =M2 /(N-Nr) *F_blue2[j-2*(c+2)-1]*cache_bb1[i%(c+1),c-i%(c+1)]
+
+    for i in range(2*(c+1),2*(c+1)+c2+1):
+        for j in range(c+1):
+            B[i,j] =M1 /Nr *F_red[j]*cache_rr2[i%(c+1),c2-i%(c+1)]
+    for i in range(2*(c+1),2*(c+1)+c2+1):
+        for j in range(c+1,2*(c+1)):
+            B[i,j] =M1 /(N-Nr) *F_blue[j%(c+1)]*cache_rb2[i%(c+1),c2-i%(c+1)]
+    for i in range(2*(c+1)+c2+1,2*(c+1)+2*(c2+1)):
+        for j in range(c+1):
+            B[i,j] =M1 /Nr *F_red[j]*cache_br2[i-(2*(c+1)+c2+1),c2-i+(2*(c+1)+c2+1)]
+    for i in range(2*(c+1)+c2+1,2*(c+1)+2*(c2+1)):
+        for j in range(c+1,2*(c+1)):
+            B[i,j] =M1 /(N-Nr) *F_blue[j%(c+1)]*cache_bb2[i-(2*(c+1)+c2+1),c2-i+(2*(c+1)+c2+1)]
+
+    for i in range(2*(c+1),2*(c+1)+c2+1):
+        for j in range(2*(c+1),2*(c+1)+c2+1):
+            B[i,j] =M2 /Nr *F_red2[j%(c+1)]*cache_rr2[i%(c+1),c2-i%(c+1)]
+    for i in range(2*(c+1),2*(c+1)+c2+1):
+        for j in range(2*(c+1)+c2+1,2*(c+1)+2*(c2+1)):
+            B[i,j] =M2 /(N-Nr) *F_blue2[j-2*(c+2)-1]*cache_rb2[i%(c+1),c2-i%(c+1)]
+    for i in range(2*(c+1)+c2+1,2*(c+1)+2*(c2+1)):
+        for j in range(2*(c+1),2*(c+1)+c2+1):
+            B[i,j] =M2 /Nr *F_red2[j%(c+1)]*cache_br2[i-(2*(c+1)+c2+1),c2-i+(2*(c+1)+c2+1)]
+    for i in range(2*(c+1)+c2+1,2*(c+1)+2*(c2+1)):
+        for j in range(2*(c+1)+c2+1,2*(c+1)+2*(c2+1)):
+            B[i,j] =M2 /(N-Nr) *F_blue2[j-2*(c+2)-1]*cache_bb2[i-(2*(c+1)+c2+1),c2-i+(2*(c+1)+c2+1)]
+
+    return B
+
 def determinant_matrix(pb,B):
     mat = B.subs(p_bb,pb[0])
     temp = np.array(mat).astype(np.float64)
@@ -243,99 +312,213 @@ def determinant_matrix_red(pr,  B):
     temp = np.array(mat).astype(np.float64)
     return np.linalg.det(temp)
 
+# Function to obtain critical p_rr values for homophily combinations (h1, h2) and probability combinations (p_rb, p_bb) in combinationsh and combinationsp
+def critical_prr(combinationsh, combinationsp, N, Nr, M, alpha, c1, c2):
+    critical_probabilities = []
+    for (h2,h1) in combinationsh:
+        F1 = F_maximum_entropy(c1, h1, Nr / N)
+        F2 = F_maximum_entropy(c2, h2, Nr / N)
+        for (prb,pbb) in combinationsp:
+            mat2 = B_matrix(F1, F2, p_rr, prb, pbb,  N, Nr, alpha*M, (1-alpha)*M) - sp.eye(2 * (c1 + c2 + 2))
+            root = fsolve(determinant_matrix_red, x0 = 0.2, args = mat2)
+            quality = determinant_matrix_red(root,mat2)
+            if root>0 and root<1 and abs(quality)<1e-10:
+                critical_probabilities.append((root[0], h1, h2, prb, pbb))      #the critical probability p_rr (root[0]) for given h1, h2, p_bb, p_rb
+    return critical_probabilities
+
+def findroot(mat):
+    prb = np.nan
+    root = fsolve(determinant_matrix_red, x0 = 0.2, args = mat)
+    quality = determinant_matrix_red(root,mat)
+    if root>0 and root<1 and abs(quality)<1e-5:
+        eigenvals, eigenvecs = np.linalg.eig(np.array(mat.subs(p_rr,root[0])).astype(np.float64))
+        # Find the eigenvector corresponding to the eigenvalue zero
+        zero_eigenvalue_index = np.where(np.isclose(eigenvals, 0))[0]
+        if zero_eigenvalue_index.size > 0:
+            zero_eigenvector = eigenvecs[:, zero_eigenvalue_index[0]]
+            if np.all(zero_eigenvector >= 0) or np.all(zero_eigenvector <= 0):
+                prb = root[0]
+                print(h1,h2,prb,quality)
+    return prb
+
+def chachematrix(c, p_rr, p_bb, p_rb):
+    # Create cache matrices for clique_perc_avg_color outcomes
+    cache_rr = sp.zeros(c + 1, c + 1)
+    cache_br = sp.zeros(c + 1, c + 1)
+    cache_rb = sp.zeros(c + 1, c + 1)
+    cache_bb = sp.zeros(c + 1, c + 1)
+
+    # Populate the cache matrices
+    for i in range(c + 1):
+        for j in range(c + 1):
+            cache_rr[i, j] = clique_perc_avg_color(i, c - i, p_rr, p_bb, p_rb, 'r', 'r')
+            cache_br[i, j] = clique_perc_avg_color(i, c - i, p_rr, p_bb, p_rb, 'b', 'r')
+            cache_rb[i, j] = clique_perc_avg_color(i, c - i, p_rr, p_bb, p_rb, 'r', 'b')
+            cache_bb[i, j] = clique_perc_avg_color(i, c - i, p_rr, p_bb, p_rb, 'b', 'b')
+    return cache_rr, cache_br, cache_rb, cache_bb
+
+# ------------------------------------------------------------------------
+# Main Execution
+# ------------------------------------------------------------------------
 
 c1 = 6
 c2 = 2
+
+timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
 
 combinations = [(-0.3, 0.3), (-0.3, 0.9), (0.0, 0.0), (0.0, 0.6), (0.6, 0.0), (0.6, 0.6)]
 prb_pbb_combinations = [(0.0, 0.0), (0.0, 0.2), (0.2, 0.0), (0.2, 0.2)]
 N = 5*10**5
 Nr = 0.6*N
-ave_degree = 6
+ave_degree = 1.8
 alpha = alpha_star(c1)
 M = ave_degree * N / ((1-alpha)*(c2 * (c2 - 1))+(alpha*c1 * (c1 - 1)))
 
 
-critical_probabilities = []
-for (h2,h1) in combinations:
-    F1 = F_maximum_entropy(c1, h1, Nr / N)
-    F2 = F_maximum_entropy(c2, h2, Nr / N)
-    for (prb,pbb) in prb_pbb_combinations:
-        mat = B_matrix(F1, F2, p_rr, pbb, prb, N, Nr, alpha*M, (1-alpha)*M) - sp.eye(2 * (c1 + c2 + 2))
-        root = fsolve(determinant_matrix_red, x0 = 0.2, args = mat)
-        quality = determinant_matrix_red(root,mat)
-        if root>0 and root<1 and abs(quality)<1e-10:
-            critical_probabilities.append((root[0], h1, h2, prb, pbb))      #the critical probability p_rr (root[0]) for given h1, h2, p_bb, p_rb
+# Homophily ranges
+h1_values = np.linspace(-0.3, 0.9, 25)
+h2_values = np.linspace(-0.3, 0.9, 25)
+
+#critical_probabilities = critical_prr(combinations, prb_pbb_combinations, N, Nr, M, alpha, c1, c2)
+#print(critical_probabilities)
+
+
+prb = 0.05
+
+cachesc1 = chachematrix(c1, p_rr, prb, prb)
+cachesc2 = chachematrix(c2, p_rr, prb, prb)
+
+# Initialize matrix to store critical probabilities
+p_rr_matrix = np.zeros((len(h1_values), len(h2_values)))
+
+# Loop over homophily values
+for i, h1 in enumerate(h1_values):
+    for j, h2 in enumerate(h2_values):
+        # Compute F1 and F2
+        F1 = F_maximum_entropy(c1, h1, Nr/N)
+        F2 = F_maximum_entropy(c2, h2, Nr/N)
+
+        if F1 is None or F2 is None:
+            p_rr_matrix[i, j] = np.nan
+            continue
+        mat = B_matrix_cached(F1, F2, p_rr, p_rr, prb, N, Nr, alpha*M, (1-alpha)*M,cachesc1, cachesc2) - sp.eye(2 * (c1 + c2 + 2))
+        p_rr_matrix[i,j]= findroot(mat)
+# Save the data
+np.save('data/critical_p_rr_p_bb'+'_'+str(prb)+'_.npy', p_rr_matrix)
+
+# Plotting
+plt.figure(figsize=(4, 3))
+plt.imshow(p_rr_matrix, origin='lower', extent=[h2_values[0], h2_values[-1], h1_values[0], h1_values[-1]],
+            aspect='auto', cmap='viridis')
+plt.colorbar(label='Critical $p_{rr}^*$')
+plt.xlabel('$h_2$')
+plt.ylabel('$h_6$')
+#plt.title('Critical Percolation Probability $\pi_{rr}^*$')
+plt.tight_layout()
+
+# Save the figure
+plt.savefig('figs/critical_p_rr_p_bb'+'_'+str(prb)+'_.pdf')
+plt.show()
 
 
 
 # # Compute F1, F2, and prbvec for all combinations of h1 and h2
-# for combination in combinations:
-#     h1 = combination[0]
-#     h2 = combination[1]
+# for (h2,h1) in combinations:
 
 #     F1 = F_maximum_entropy(c1, h1, Nr / N)
 #     F2 = F_maximum_entropy(c2, h2, Nr / N)
 #     print(h1, h2, F1, F2)
 
-#     mat = B_matrix(F1, F2, p_rr, p_bb, 0.2, N, Nr, alpha*M, (1-alpha)*M) - sp.eye(2 * (c1 + c2 + 2))
-
-#     xs = [x * 0.02 for x in range(0, 50)]
-#     xs.reverse()
+#     mat = B_matrix(F1, F2, p_rr, p_bb, prb, N, Nr, alpha*M, (1-alpha)*M) - sp.eye(2 * (c1 + c2 + 2))
+#     p_rrmin = critical_prr([(h1,h2)],[(prb,0)], N, Nr, M, alpha, c1, c2)
+#     print(p_rrmin)
+#     xs = np.linspace(0,1,50)
 #     prbvec = []
-#     x_zero = 0.6
+    
+#     x_zero = 0.01
 #     for pr in xs:
 #         mat2 = mat.subs(p_rr, pr)
 #         root = fsolve(determinant_matrix, x0 = x_zero, args = mat2)
 #         quality = determinant_matrix(root,mat2)
-#         x_zero = max(root[0],0)
-#         if root>0 and root<1 and abs(quality)<1e-10:
-#             prbvec.append((pr, root[0]))
-#             print(pr, root[0], quality)
-#         if abs(quality)>1e-10:
-#             break
+#         if root>0 and root<1 and abs(quality)<1e-5:
+#             eigenvals, eigenvecs = np.linalg.eig(np.array(mat2.subs(p_bb,root[0])).astype(np.float64))
+#             # Find the eigenvector corresponding to the eigenvalue zero
+#             zero_eigenvalue_index = np.where(np.isclose(eigenvals, 0))[0]
+#             if zero_eigenvalue_index.size > 0:
+#                 zero_eigenvector = eigenvecs[:, zero_eigenvalue_index[0]]
+#                 if np.all(zero_eigenvector >= 0) or np.all(zero_eigenvector <= 0):
+#                     prbvec.append((pr, root[0]))
+#                     print(pr, root[0], quality)
 #         # for pb in (x * 0.02 for x in range(0, 50)):
 #         #     mat2 = mat2.subs(p_bb, pb)
 #         #     if abs(mat2.det()) < 0.01:
 #         #         prbvec.append((pr, pb))
 #         #         print(pr, pb, mat2.det())
 #         #         break
-
 #     # Plotting the entries in prbvec
 #     pr_values = [pr for pr, pb in prbvec]
 #     pb_values = [pb for pr, pb in prbvec]
 
-#     plt.plot(pr_values, pb_values, label=f'h1={h1}, h2={h2}')
+#     plt.plot(pr_values, pb_values, label=f'$h_1$={h1}, $h_2$={h2}')
 
 # # Finalize plot
+# plt.rc('font', size=18)          # controls default text sizes
+# plt.rc('axes', titlesize=20)     # fontsize of the axes title
+# plt.rc('axes', labelsize=20)     # fontsize of the x and y labels
+# plt.rc('xtick', labelsize=18)    # fontsize of the tick labels
+# plt.rc('ytick', labelsize=18)    # fontsize of the tick labels
+# plt.rc('legend', fontsize=18)    # legend fontsize
+
 # plt.xlabel('$p_{rr}$')
 # plt.ylabel('$p_{bb}$')
 # plt.grid(True)
 # plt.legend()
+# plt.axis([0, 1, 0, 0.5])
+
+# # Create figs directory if it does not exist
+# if not os.path.exists('figs'):
+#     os.makedirs('figs')
+
+# # Create data directory if it does not exist
+# if not os.path.exists('data'):
+#     os.makedirs('data')
+
+# # Save the figure
+# fig_filename = os.path.join('figs', f'p_rb={prb}_critical_percolation_{timestamp}.pdf')
+# plt.savefig(fig_filename, bbox_inches='tight')
+
+
+# # Save the data using pickle
+# Data = [[pr_values],[pb_values]]
+# data_filename = os.path.join('data', f'p_rb={prb}_critical_percolation_data_{timestamp}.pkl')
+# with open(data_filename, 'wb') as f:
+#     pickle.dump(Data, f)
+
+# print('done', datetime.now().strftime('%Y-%m-%d_%H-%M-%S'))
 # plt.show()
 
-# h1vec = [0.1* x for x in range(0, 11)]
-# h2vec = [0.1* x for x in range(0, 11)]
+# # h1vec = [0.1* x for x in range(0, 11)]
+# # h2vec = [0.1* x for x in range(0, 11)]
 
 
-# probmat = np.zeros((len(h1vec),len(h2vec)))
-# for (i,h1) in enumerate(h1vec):
-#     F1 = F_maximum_entropy(c1, h1, Nr / N)
-#     for (j,h2) in enumerate(h2vec):
-#         F2 = F_maximum_entropy(c2, h2, Nr / N)
-#         mat = B_matrix(F1, F2, p_bb, p_bb, 0.1, N, Nr, alpha*M, (1-alpha)*M) - sp.eye(2 * (c1 + c2 + 2))
-#         root = fsolve(determinant_matrix, x0 = 0.2, args = mat)
-#         quality = determinant_matrix(root,mat)
-#         if root>0 and root<1 and abs(quality)<1e-10:
-#             probmat[i,j] = root[0]
-#             print(h1, h2, root[0], quality)
+# # probmat = np.zeros((len(h1vec),len(h2vec)))
+# # for (i,h1) in enumerate(h1vec):
+# #     F1 = F_maximum_entropy(c1, h1, Nr / N)
+# #     for (j,h2) in enumerate(h2vec):
+# #         F2 = F_maximum_entropy(c2, h2, Nr / N)
+# #         mat = B_matrix(F1, F2, p_bb, p_bb, 0.1, N, Nr, alpha*M, (1-alpha)*M) - sp.eye(2 * (c1 + c2 + 2))
+# #         root = fsolve(determinant_matrix, x0 = 0.2, args = mat)
+# #         quality = determinant_matrix(root,mat)
+# #         if root>0 and root<1 and abs(quality)<1e-10:
+# #             probmat[i,j] = root[0]
+# #             print(h1, h2, root[0], quality)
 
-# # Plotting the heatmap
-# plt.figure(figsize=(8, 6))
-# plt.imshow(probmat, cmap='hot', interpolation='nearest', aspect='auto')
-# plt.colorbar(label='Probability')
-# plt.xlabel('$h_2$')
-# plt.ylabel('$h_1$')
-# plt.xticks(ticks=np.arange(len(h2vec)), labels=[f'{h2:.1f}' for h2 in h2vec])
-# plt.yticks(ticks=np.arange(len(h1vec)), labels=[f'{h1:.1f}' for h1 in h1vec])
-# plt.show()
+# # # Plotting the heatmap
+# # plt.figure(figsize=(8, 6))
+# # plt.imshow(probmat, cmap='hot', interpolation='nearest', aspect='auto')
+# # plt.colorbar(label='Probability')
+# # plt.xlabel('$h_2$')
+# # plt.ylabel('$h_1$')
+# # plt.xticks(ticks=np.arange(len(h2vec)), labels=[f'{h2:.1f}' for h2 in h2vec])
+# # plt.yticks(ticks=np.arange(len(h1vec)), labels=[f'{h1:.1f}' for h1 in h1vec])
+# # plt.show()
