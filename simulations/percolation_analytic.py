@@ -212,10 +212,10 @@ def B_matrix(F, F2,p_rr, p_bb, p_rb,N, Nr, M1, M2):
             B[i,j] =M1 /(N-Nr) *F_blue[j%(c+1)]*clique_perc_avg_color(i%(c+1),c2-i%(c+1), p_rr, p_bb, p_rb,'r','b')
     for i in range(2*(c+1)+c2+1,2*(c+1)+2*(c2+1)):
         for j in range(c+1):
-            B[i,j] =M1 /Nr *F_red[j]*clique_perc_avg_color(i-(2*(c+1)+c2+1),c-i+(2*(c+1)+c2+1), p_rr, p_bb, p_rb,'b','r')
+            B[i,j] =M1 /Nr *F_red[j]*clique_perc_avg_color(i-(2*(c+1)+c2+1),c2-i+(2*(c+1)+c2+1), p_rr, p_bb, p_rb,'b','r')
     for i in range(2*(c+1)+c2+1,2*(c+1)+2*(c2+1)):
         for j in range(c+1,2*(c+1)):
-            B[i,j] =M1 /(N-Nr) *F_blue[j%(c+1)]*clique_perc_avg_color(i-(2*(c+1)+c2+1),c-i+(2*(c+1)+c2+1),  p_rr, p_bb, p_rb,'b','b')
+            B[i,j] =M1 /(N-Nr) *F_blue[j%(c+1)]*clique_perc_avg_color(i-(2*(c+1)+c2+1),c2-i+(2*(c+1)+c2+1),  p_rr, p_bb, p_rb,'b','b')
 
     for i in range(2*(c+1),2*(c+1)+c2+1):
         for j in range(2*(c+1),2*(c+1)+c2+1):
@@ -225,10 +225,10 @@ def B_matrix(F, F2,p_rr, p_bb, p_rb,N, Nr, M1, M2):
             B[i,j] =M2 /(N-Nr) *F_blue2[j-2*(c+2)-1]*clique_perc_avg_color(i%(c+1),c2-i%(c+1), p_rr, p_bb, p_rb,'r','b')
     for i in range(2*(c+1)+c2+1,2*(c+1)+2*(c2+1)):
         for j in range(2*(c+1),2*(c+1)+c2+1):
-            B[i,j] =M2 /Nr *F_red2[j%(c+1)]*clique_perc_avg_color(i-(2*(c+1)+c2+1),c-i+(2*(c+1)+c2+1), p_rr, p_bb, p_rb,'b','r')
+            B[i,j] =M2 /Nr *F_red2[j%(c+1)]*clique_perc_avg_color(i-(2*(c+1)+c2+1),c2-i+(2*(c+1)+c2+1), p_rr, p_bb, p_rb,'b','r')
     for i in range(2*(c+1)+c2+1,2*(c+1)+2*(c2+1)):
         for j in range(2*(c+1)+c2+1,2*(c+1)+2*(c2+1)):
-            B[i,j] =M2 /(N-Nr) *F_blue2[j-2*(c+2)-1]*clique_perc_avg_color(i-(2*(c+1)+c2+1),c-i+(2*(c+1)+c2+1),  p_rr, p_bb, p_rb,'b','b')
+            B[i,j] =M2 /(N-Nr) *F_blue2[j-2*(c+2)-1]*clique_perc_avg_color(i-(2*(c+1)+c2+1),c2-i+(2*(c+1)+c2+1),  p_rr, p_bb, p_rb,'b','b')
 
     return B
 
@@ -245,55 +245,55 @@ def B_matrix_cached(F, F2,p_rr, p_bb, p_rb,N, Nr, M1, M2,cachesc1,cachesc2):
     B = sp.ones(2*(c+4),2*(c+4))
     for i in range(c+1):
         for j in range(c+1):
-            B[i,j] =M1 /Nr *F_red[j]*cache_rr1[i,c-i]
+            B[i,j] =M1 /Nr *F_red[j]*cache_rr1[i]
     for i in range(c+1,2*(c+1)):
         for j in range(c+1):
-            B[i,j] =M1 /Nr *F_red[j]*cache_br1[i%(c+1),c-i%(c+1)]
+            B[i,j] =M1 /Nr *F_red[j]*cache_br1[i%(c+1)]
     for i in range(c+1):
         for j in range(c+1,2*(c+1)):
-            B[i,j] =M1 /(N-Nr) *F_blue[j%(c+1)]*cache_rb1[i,c-i%(c+1)]
+            B[i,j] =M1 /(N-Nr) *F_blue[j%(c+1)]*cache_rb1[i]
     for i in range(c+1,2*(c+1)):
         for j in range(c+1,2*(c+1)):
-            B[i,j] =M1 /(N-Nr) *F_blue[j%(c+1)]*cache_bb1[i%(c+1),c-i%(c+1)]
+            B[i,j] =M1 /(N-Nr) *F_blue[j%(c+1)]*cache_bb1[i%(c+1)]
 
     for i in range(c+1):
         for j in range(2*(c+1),2*(c+1)+c2+1):
-            B[i,j] =M2 /Nr *F_red2[j%(c+1)]*cache_rr1[i,c-i]
+            B[i,j] =M2 /Nr *F_red2[j%(c+1)]*cache_rr1[i]
     for i in range(c+1):
         for j in range(2*(c+1)+c2+1,2*(c+1)+2*(c2+1)):
-            B[i,j] =M2 /(N-Nr) *F_blue2[j-2*(c+2)-1]*cache_rb1[i,c-i%(c+1)]
+            B[i,j] =M2 /(N-Nr) *F_blue2[j-2*(c+2)-1]*cache_rb1[i]
     for i in range(c+1,2*(c+1)):
         for j in range(2*(c+1),2*(c+1)+c2+1):
-            B[i,j] =M2 /Nr *F_red2[j-2*(c+1)]*cache_br1[i%(c+1),c-i%(c+1)]
+            B[i,j] =M2 /Nr *F_red2[j-2*(c+1)]*cache_br1[i%(c+1)]
     for i in range(c+1,2*(c+1)):
         for j in range(2*(c+1)+c2+1,2*(c+1)+2*(c2+1)):
-            B[i,j] =M2 /(N-Nr) *F_blue2[j-2*(c+2)-1]*cache_bb1[i%(c+1),c-i%(c+1)]
+            B[i,j] =M2 /(N-Nr) *F_blue2[j-2*(c+2)-1]*cache_bb1[i%(c+1)]
 
     for i in range(2*(c+1),2*(c+1)+c2+1):
         for j in range(c+1):
-            B[i,j] =M1 /Nr *F_red[j]*cache_rr2[i%(c+1),c2-i%(c+1)]
+            B[i,j] =M1 /Nr *F_red[j]*cache_rr2[i%(c+1)]
     for i in range(2*(c+1),2*(c+1)+c2+1):
         for j in range(c+1,2*(c+1)):
-            B[i,j] =M1 /(N-Nr) *F_blue[j%(c+1)]*cache_rb2[i%(c+1),c2-i%(c+1)]
+            B[i,j] =M1 /(N-Nr) *F_blue[j%(c+1)]*cache_rb2[i%(c+1)]
     for i in range(2*(c+1)+c2+1,2*(c+1)+2*(c2+1)):
         for j in range(c+1):
-            B[i,j] =M1 /Nr *F_red[j]*cache_br2[i-(2*(c+1)+c2+1),c2-i+(2*(c+1)+c2+1)]
+            B[i,j] =M1 /Nr *F_red[j]*cache_br2[i-(2*(c+1)+c2+1)]
     for i in range(2*(c+1)+c2+1,2*(c+1)+2*(c2+1)):
         for j in range(c+1,2*(c+1)):
-            B[i,j] =M1 /(N-Nr) *F_blue[j%(c+1)]*cache_bb2[i-(2*(c+1)+c2+1),c2-i+(2*(c+1)+c2+1)]
+            B[i,j] =M1 /(N-Nr) *F_blue[j%(c+1)]*cache_bb2[i-(2*(c+1)+c2+1)]
 
     for i in range(2*(c+1),2*(c+1)+c2+1):
         for j in range(2*(c+1),2*(c+1)+c2+1):
-            B[i,j] =M2 /Nr *F_red2[j%(c+1)]*cache_rr2[i%(c+1),c2-i%(c+1)]
+            B[i,j] =M2 /Nr *F_red2[j%(c+1)]*cache_rr2[i%(c+1)]
     for i in range(2*(c+1),2*(c+1)+c2+1):
         for j in range(2*(c+1)+c2+1,2*(c+1)+2*(c2+1)):
-            B[i,j] =M2 /(N-Nr) *F_blue2[j-2*(c+2)-1]*cache_rb2[i%(c+1),c2-i%(c+1)]
+            B[i,j] =M2 /(N-Nr) *F_blue2[j-2*(c+2)-1]*cache_rb2[i%(c+1)]
     for i in range(2*(c+1)+c2+1,2*(c+1)+2*(c2+1)):
         for j in range(2*(c+1),2*(c+1)+c2+1):
-            B[i,j] =M2 /Nr *F_red2[j%(c+1)]*cache_br2[i-(2*(c+1)+c2+1),c2-i+(2*(c+1)+c2+1)]
+            B[i,j] =M2 /Nr *F_red2[j%(c+1)]*cache_br2[i-(2*(c+1)+c2+1)]
     for i in range(2*(c+1)+c2+1,2*(c+1)+2*(c2+1)):
         for j in range(2*(c+1)+c2+1,2*(c+1)+2*(c2+1)):
-            B[i,j] =M2 /(N-Nr) *F_blue2[j-2*(c+2)-1]*cache_bb2[i-(2*(c+1)+c2+1),c2-i+(2*(c+1)+c2+1)]
+            B[i,j] =M2 /(N-Nr) *F_blue2[j-2*(c+2)-1]*cache_bb2[i-(2*(c+1)+c2+1)]
 
     return B
 
@@ -343,18 +343,17 @@ def findroot(mat):
 
 def chachematrix(c, p_rr, p_bb, p_rb):
     # Create cache matrices for clique_perc_avg_color outcomes
-    cache_rr = sp.zeros(c + 1, c + 1)
-    cache_br = sp.zeros(c + 1, c + 1)
-    cache_rb = sp.zeros(c + 1, c + 1)
-    cache_bb = sp.zeros(c + 1, c + 1)
+    cache_rr = sp.zeros(c + 1)
+    cache_br = sp.zeros(c + 1)
+    cache_rb = sp.zeros(c + 1)
+    cache_bb = sp.zeros(c + 1)
 
     # Populate the cache matrices
     for i in range(c + 1):
-        for j in range(c + 1):
-            cache_rr[i, j] = clique_perc_avg_color(i, c - i, p_rr, p_bb, p_rb, 'r', 'r')
-            cache_br[i, j] = clique_perc_avg_color(i, c - i, p_rr, p_bb, p_rb, 'b', 'r')
-            cache_rb[i, j] = clique_perc_avg_color(i, c - i, p_rr, p_bb, p_rb, 'r', 'b')
-            cache_bb[i, j] = clique_perc_avg_color(i, c - i, p_rr, p_bb, p_rb, 'b', 'b')
+        cache_rr[i] = clique_perc_avg_color(i, c - i, p_rr, p_bb, p_rb, 'r', 'r')
+        cache_br[i] = clique_perc_avg_color(i, c - i, p_rr, p_bb, p_rb, 'b', 'r')
+        cache_rb[i] = clique_perc_avg_color(i, c - i, p_rr, p_bb, p_rb, 'r', 'b')
+        cache_bb[i] = clique_perc_avg_color(i, c - i, p_rr, p_bb, p_rb, 'b', 'b')
     return cache_rr, cache_br, cache_rb, cache_bb
 
 # ------------------------------------------------------------------------
@@ -383,10 +382,10 @@ h2_values = np.linspace(-0.3, 0.9, 25)
 #print(critical_probabilities)
 
 
-prb = 0.05
+prb = 0.1
 
-cachesc1 = chachematrix(c1, p_rr, prb, prb)
-cachesc2 = chachematrix(c2, p_rr, prb, prb)
+cachesc1 = chachematrix(c1, p_rr, p_rr, prb)
+cachesc2 = chachematrix(c2, p_rr, p_rr, prb)
 
 # Initialize matrix to store critical probabilities
 p_rr_matrix = np.zeros((len(h1_values), len(h2_values)))
