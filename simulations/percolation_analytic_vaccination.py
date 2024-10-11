@@ -370,14 +370,14 @@ c2 = 2
 
 timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
 
-combinations = [(-0.3, 0.3), (-0.3, 0.9), (0.0, 0.0), (0.0, 0.6), (0.6, 0.0), (0.6, 0.6)]
-prb_pbb_combinations = [(0.0, 0.0), (0.0, 0.2), (0.2, 0.0), (0.2, 0.2)]
 N = 5*10**5
 Nr = 0.6*N
 ave_degree = 3
-alpha = alpha_star(c1, c2)
+alpha = 0.05
 M = ave_degree * N / ((1-alpha)*(c2 * (c2 - 1))+(alpha*c1 * (c1 - 1)))
-pbbratio = 1
+
+efficacy = 0.5
+intra_efficacy = 0.5
 
 
 # Homophily ranges
@@ -388,10 +388,9 @@ h2_values = np.linspace(-0.3, 0.9, 25)
 #print(critical_probabilities)
 
 
-prb = 0.1
 
-cachesc1 = chachematrix(c1, p_rr, pbbratio*p_rr, prb)
-cachesc2 = chachematrix(c2, p_rr, pbbratio*p_rr, prb)
+cachesc1 = chachematrix(c1, p_rr, intra_efficacy*efficacy*p_rr, efficacy*p_rr)
+cachesc2 = chachematrix(c1, p_rr, intra_efficacy*efficacy*p_rr, efficacy*p_rr)
 
 # Initialize matrix to store critical probabilities
 p_rr_matrix = np.zeros((len(h1_values), len(h2_values)))
@@ -407,26 +406,26 @@ for i, h1 in enumerate(h1_values):
         if F1 is None or F2 is None:
             p_rr_matrix[i, j] = np.nan
             continue
-        mat = B_matrix_cached(F1, F2, p_rr, p_rr, prb, N, Nr, alpha*M, (1-alpha)*M,cachesc1, cachesc2) - sp.eye(2 * (c1 + c2 + 2))
+        mat = B_matrix_cached(F1, F2, p_rr, intra_efficacy*efficacy*p_rr, efficacy*p_rr, N, Nr, alpha*M, (1-alpha)*M,cachesc1, cachesc2) - sp.eye(2 * (c1 + c2 + 2))
         f = sp.lambdify(p_rr, mat)
         p_rr_matrix[i,j]= findroot(f, x_zero)
         if p_rr_matrix[i,j] is not None and p_rr_matrix[i,j] is not np.nan:
             x_zero = p_rr_matrix[i,j]
 # Save the data
-np.save('data/critical_p_rr_p_bb'+'_'+str(prb)+'_N_'+str(c1)+'_'+ str(Nr/N)+'_prpbrat_'+str(pbbratio)+'.npy', p_rr_matrix)
+np.save('data/critical_vaccination'+'_'+'_N_'+str(c1)+'_'+ str(Nr/N)+'_efficacy_'+str(efficacy)+'_effintra_'+str(intra_efficacy)+'alphalow.npy', p_rr_matrix)
 
 # Plotting
 plt.figure(figsize=(4, 3))
 plt.imshow(p_rr_matrix, origin='lower', extent=[h2_values[0], h2_values[-1], h1_values[0], h1_values[-1]],
             aspect='auto', cmap='viridis')
-plt.colorbar(label='Critical $p_{rr}^*$')
+plt.colorbar(label='Critical $\pi^*$')
 plt.xlabel('$h_2$')
-plt.ylabel('$h_6$')
+plt.ylabel('$h_4$')
 #plt.title('Critical Percolation Probability $\pi_{rr}^*$')
 plt.tight_layout()
 
 # Save the figure
-plt.savefig('figs/critical_p_rr_p_bb'+'_'+str(prb)+'_N_'+str(c1)+'_frac'+str(Nr/N)+'_prpbrat_'+str(pbbratio)+'.pdf')
+plt.savefig('figs/critical_vaccinatin'+'_N_'+str(c1)+'_frac'+str(Nr/N)+'_efficacy_'+str(efficacy)+'_effintra_'+str(intra_efficacy)+'alphalow.pdf')
 plt.show()
 
 
