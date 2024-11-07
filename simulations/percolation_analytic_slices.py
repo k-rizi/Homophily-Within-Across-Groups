@@ -6,12 +6,13 @@ import matplotlib.pyplot as plt
 from scipy.optimize import minimize
 from scipy.optimize import fsolve
 
-
-from scipy import linalg
-
 abspath = os.path.abspath(__file__)
 dname = os.path.dirname(abspath)
 os.chdir(dname)
+
+
+from scipy import linalg
+
 
 # Define the symbolic variables
 p_success = sp.Symbol('p_success')
@@ -346,7 +347,6 @@ def findroot(f, x0 = 0.8):
             zero_eigenvector = eigenvecs[:, zero_eigenvalue_index[0]]
             if np.all(zero_eigenvector >= 0) or np.all(zero_eigenvector <= 0):
                 prb = root[0]
-                print(h1,h2,prb,quality)
     return prb
 
 def chachematrix(c, p_rr, p_bb, p_rb):
@@ -364,6 +364,48 @@ def chachematrix(c, p_rr, p_bb, p_rb):
         cache_bb[i] = clique_perc_avg_color(i, c - i, p_rr, p_bb, p_rb, 'b', 'b')
     return cache_rr, cache_br, cache_rb, cache_bb
 
+
+def getslice(h1_values,h2_values, p_rr, p_bb, p_rb, N, Nr, M, alpha, c1, c2):
+    p_rr_crit = []
+    hom = []
+    xzero = 0.5
+    if len(h1_values) == 1:
+        h1 = h1_values[0]
+        F1 = F_maximum_entropy(c1, h1, Nr / N)
+        for i, h2 in enumerate(h2_values):
+            F2 = F_maximum_entropy(c2, h2, Nr/N)
+            mat = B_matrix(F1, F2, p_rr, p_bb, p_rb, N, Nr, alpha*M, (1-alpha)*M) - sp.eye(2 * (c1 + c2 + 2))
+            f = sp.lambdify(p_rr, mat)
+            p_rr_crit.append( findroot(f, xzero))
+            hom.append( alpha*h1+(1-alpha)*h2)
+            xzero = p_rr_crit[-1]
+            print(h1,h2,p_rr_crit[-1])
+    elif len(h2_values) == 1:
+        h2 = h2_values[0]
+        F2 = F_maximum_entropy(c2, h2, Nr / N)
+        for i, h1 in enumerate(h1_values):
+            F1 = F_maximum_entropy(c1, h1, Nr/N)
+            mat = B_matrix(F1, F2, p_rr, p_bb, p_rb, N, Nr, alpha*M, (1-alpha)*M) - sp.eye(2 * (c1 + c2 + 2))
+            f = sp.lambdify(p_rr, mat)
+            p_rr_crit.append( findroot(f, xzero))
+            hom.append( alpha*h1+(1-alpha)*h2)
+            xzero=p_rr_crit[-1]
+            print(h1,h2,p_rr_crit[-1])
+    elif len(h1_values) == len(h2_values):
+        for i, h1 in enumerate(h1_values):
+            h2 = h2_values[i]
+            F2 = F_maximum_entropy(c2, h2, Nr / N)
+            F1 = F_maximum_entropy(c1, h1, Nr/N)
+            mat = B_matrix(F1, F2, p_rr, p_bb, p_rb, N, Nr, alpha*M, (1-alpha)*M) - sp.eye(2 * (c1 + c2 + 2))
+            f = sp.lambdify(p_rr, mat)
+            p_rr_crit.append( findroot(f, xzero))
+            hom.append( alpha*h1+(1-alpha)*h2)
+            xzero=p_rr_crit[-1]
+            print(h1,h2,p_rr_crit[-1])
+    else:
+        print('Error, this is not a slice')
+
+    return p_rr_crit, hom
 # ------------------------------------------------------------------------
 # Main Execution
 # ------------------------------------------------------------------------
@@ -373,16 +415,14 @@ c2 = 2
 
 timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
 
-combinations = [(-0.3, 0.3), (-0.3, 0.9), (0.0, 0.0), (0.0, 0.6), (0.6, 0.0), (0.6, 0.6)]
-prb_pbb_combinations = [(0.0, 0.0), (0.0, 0.2), (0.2, 0.0), (0.2, 0.2)]
 N = 5*10**5
-Nr = 0.54*N
-ave_degree = 2
+Nr = 0.5*N
+ave_degree = 3
 #alpha = alpha_star(c1, c2)
 alpha = 0.5
 M = ave_degree * N / ((1-alpha)*(c2 * (c2 - 1))+(alpha*c1 * (c1 - 1)))
-pbbratio = 1
 
+prb = 0.3
 
 # Homophily ranges
 h1_values = np.linspace(-0.3, 0.9, 25)
@@ -392,57 +432,48 @@ h2_values = np.linspace(-0.3, 0.9, 25)
 #print(critical_probabilities)
 
 
-prb = 0.35
 
-cachesc1 = chachematrix(c1, p_rr, pbbratio*p_rr, prb)
-cachesc2 = chachematrix(c2, p_rr, pbbratio*p_rr, prb)
+#cachesc1 = chachematrix(c1, p_rr, p_rr, prb)
+#cachesc2 = chachematrix(c1, p_rr, p_rr, prb)
 
-# Initialize matrix to store critical probabilities
-p_rr_matrix = np.zeros((len(h1_values), len(h2_values)))
-x_zero = 0.8
+# Define a range of Nr values
+Nr_values = [0.2 * N, 0.3 * N, 0.4 * N, 0.5 * N]
 
-# Loop over homophily values
-for i, h1 in enumerate(h1_values):
-    for j, h2 in enumerate(h2_values):
-        # Compute F1 and F2
-        F1 = F_maximum_entropy(c1, h1, Nr/N)
-        F2 = F_maximum_entropy(c2, h2, Nr/N)
-
-        if F1 is None or F2 is None:
-            p_rr_matrix[i, j] = np.nan
-            continue
-        mat = B_matrix_cached(F1, F2, p_rr, pbbratio*p_rr, prb, N, Nr, alpha*M, (1-alpha)*M,cachesc1, cachesc2) - sp.eye(2 * (c1 + c2 + 2))
-        f = sp.lambdify(p_rr, mat)
-        p_rr_matrix[i,j]= findroot(f, x_zero)
-        if p_rr_matrix[i,j] is not None and p_rr_matrix[i,j] is not np.nan:
-            x_zero = p_rr_matrix[i,j]
-
-# Plotting
+# Initialize plot
+plt.figure(figsize=(10, 6))
 plt.rcParams.update({'font.size': 20})
-plt.figure(figsize=(4, 3))
-plt.imshow(p_rr_matrix, origin='lower', extent=[h2_values[0], h2_values[-1], h1_values[0], h1_values[-1]],
-            aspect='auto', cmap='viridis')
-plt.colorbar(label='Critical $p_{rr}^*$')
-plt.xlabel('$h_2$')
-plt.ylabel('$h_4$')
+# Loop through each Nr value
+for Nr in Nr_values:
 
-# Finalize plot
-plt.rc('font', size=18)          # controls default text sizes
-plt.rc('axes', titlesize=20)     # fontsize of the axes title
-plt.rc('axes', labelsize=20)     # fontsize of the x and y labels
-plt.rc('xtick', labelsize=18)    # fontsize of the tick labels
-plt.rc('ytick', labelsize=18)    # fontsize of the tick labels
-plt.rc('legend', fontsize=18)    # legend fontsize
+    # Initialize matrix to store critical probabilities
+    p_rr_crit_h1, hom1 = getslice(h1_values,[0], p_rr, p_rr, prb, N, Nr, M, alpha, c1, c2)
+    p_rr_crit_h2, hom2 = getslice([0],h2_values, p_rr, p_rr, prb, N, Nr, M, alpha, c1, c2)
+    #p_rr_crit_h_eq, hom3 = getslice(h1_values,h2_values, p_rr, p_rr, prb, N, Nr, M, alpha, c1, c2)
 
+    # Plot the results
+    plt.plot(hom1, [p_rr_crit_h1[i]/p_rr_crit_h2[i] for i in range(len(p_rr_crit_h1))], label=f'Nr = {Nr/N:.1f}N')
+
+
+
+# Save the data
+#np.save('data/slice'+'_'+'_N_'+str(c1)+'_'+ str(Nr/N)+'.npy', p_rr_matrix)
+
+# Plot p_rr_crit_h1 against hom1 and p_rr_crit_h2 against hom2 in the same plot
+#plt.figure(figsize=(6, 4))
+#plt.plot(hom1, [p_rr_crit_h1[i]/p_rr_crit_h2[i] for i in len(p_rr_crit_h1)], label='$h_2 = 0$', marker='o')
+#plt.plot(hom2, p_rr_crit_h2, label='$h_1 = 0$', marker='x')
+#plt.plot(hom3, p_rr_crit_h_eq, label='$h_1 = h_2$', marker='x')
+
+ 
+# using rc function
+plt.xlabel('$h$')
+plt.ylabel('$p_{rr,4}^*/p_{rr,2}^*$')
+plt.legend()
 #plt.title('Critical Percolation Probability $\pi_{rr}^*$')
 plt.tight_layout()
 
 # Save the figure
-plt.savefig('figs/critical_p_rr_p_bb'+'_'+str(prb)+'_N_'+str(c1)+'_frac'+str(Nr/N)+'_prpbrat_'+str(pbbratio)+'alpha_'+str(alpha)+'crit.pdf')
-
-# Save the data
-np.save('data/critical_p_rr_p_bb'+'_'+str(prb)+'_N_'+str(c1)+'_'+ str(Nr/N)+'_prpbrat_'+str(pbbratio)+'alpha_'+str(alpha)+'.npy', p_rr_matrix)
-
+plt.savefig('figs/slice_divided'+'_N_'+str(c1)+'_alpha_' +str(alpha)+ 'prb'+str(prb)+ '.pdf')
 plt.show()
 
 
