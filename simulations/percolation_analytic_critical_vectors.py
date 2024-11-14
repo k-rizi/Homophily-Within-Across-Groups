@@ -5,17 +5,13 @@ from datetime import datetime
 import matplotlib.pyplot as plt
 from scipy.optimize import minimize
 from scipy.optimize import fsolve
-from matplotlib.colors import Normalize, TwoSlopeNorm
-from matplotlib.patches import Patch
-import matplotlib.cm as cm
-
-abspath = os.path.abspath(__file__)
-dname = os.path.dirname(abspath)
-os.chdir(dname)
 
 
 from scipy import linalg
 
+abspath = os.path.abspath(__file__)
+dname = os.path.dirname(abspath)
+os.chdir(dname)
 
 # Define the symbolic variables
 p_success = sp.Symbol('p_success')
@@ -350,6 +346,7 @@ def findroot(f, x0 = 0.8):
             zero_eigenvector = eigenvecs[:, zero_eigenvalue_index[0]]
             if np.all(zero_eigenvector >= 0) or np.all(zero_eigenvector <= 0):
                 prb = root[0]
+                print(h1,h2,prb,quality)
     return prb
 
 def chachematrix(c, p_rr, p_bb, p_rb):
@@ -367,232 +364,35 @@ def chachematrix(c, p_rr, p_bb, p_rb):
         cache_bb[i] = clique_perc_avg_color(i, c - i, p_rr, p_bb, p_rb, 'b', 'b')
     return cache_rr, cache_br, cache_rb, cache_bb
 
-
-def getslice(h1_values,h2_values, p_rr, p_bb, p_rb, N, Nr, M, alpha, c1, c2,xzero = 0.1):
-    p_rr_crit = []
-    hom = []
-    if len(h1_values) == 1:
-        h1 = h1_values[0]
-        F1 = F_maximum_entropy(c1, h1, Nr / N)
-        for i, h2 in enumerate(h2_values):
-            F2 = F_maximum_entropy(c2, h2, Nr/N)
-            mat = B_matrix(F1, F2, p_rr, p_bb, p_rb, N, Nr, alpha*M, (1-alpha)*M) - sp.eye(2 * (c1 + c2 + 2))
-            f = sp.lambdify(p_rr, mat)
-            p_rr_crit.append( findroot(f, xzero))
-            hom.append( alpha*h1+(1-alpha)*h2)
-            xzero = p_rr_crit[-1]
-            print(alpha*h1+(1-alpha)*h2,h1,h2,p_rr_crit[-1])
-    elif len(h2_values) == 1:
-        h2 = h2_values[0]
-        F2 = F_maximum_entropy(c2, h2, Nr / N)
-        for i, h1 in enumerate(h1_values):
-            F1 = F_maximum_entropy(c1, h1, Nr/N)
-            mat = B_matrix(F1, F2, p_rr, p_bb, p_rb, N, Nr, alpha*M, (1-alpha)*M) - sp.eye(2 * (c1 + c2 + 2))
-            f = sp.lambdify(p_rr, mat)
-            p_rr_crit.append( findroot(f, xzero))
-            hom.append( alpha*h1+(1-alpha)*h2)
-            xzero=p_rr_crit[-1]
-            print(alpha*h1+(1-alpha)*h2,h1,h2,p_rr_crit[-1])
-    elif len(h1_values) == len(h2_values):
-        for i, h1 in enumerate(h1_values):
-            h2 = h2_values[i]
-            F2 = F_maximum_entropy(c2, h2, Nr / N)
-            F1 = F_maximum_entropy(c1, h1, Nr/N)
-            mat = B_matrix(F1, F2, p_rr, p_bb, p_rb, N, Nr, alpha*M, (1-alpha)*M) - sp.eye(2 * (c1 + c2 + 2))
-            f = sp.lambdify(p_rr, mat)
-            p_rr_crit.append( findroot(f, xzero))
-            hom.append( alpha*h1+(1-alpha)*h2)
-            xzero=p_rr_crit[-1]
-            print(alpha*h1+(1-alpha)*h2,h1,h2,p_rr_crit[-1])
-    else:
-        print('Error, this is not a slice')
-
-    return p_rr_crit, hom
 # ------------------------------------------------------------------------
 # Main Execution
 # ------------------------------------------------------------------------
-# Computhes the homophily against p_rb area plot assuming that p_bb = factor * p_rr, setting one of the local homophily values to a fixed value homsliceval
 
+# compute the critical p_rr for homophily combinations combinations and p_rb p_bb combinations prb_pbb_combinations.
 
-c1 = 4
+c1 = 6
 c2 = 2
 
 timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
 
+combinations = [(-0.3, 0.3), (-0.3, 0.9), (0.0, 0.0), (0.0, 0.6), (0.6, 0.0), (0.6, 0.6)]
+prb_pbb_combinations = [(0.0, 0.0), (0.0, 0.2), (0.2, 0.0), (0.2, 0.2)]
 N = 5*10**5
-Nr = 0.5*N
-ave_degree = 2
+Nr = 0.6*N
+ave_degree = 6
 alpha = alpha_star(c1, c2)
 #alpha = 0.5
 M = ave_degree * N / ((1-alpha)*(c2 * (c2 - 1))+(alpha*c1 * (c1 - 1)))
-factor = 0.1
-
-homsliceval = 0.5
-
-# Define the range for prb and p_bb
-prb_values = np.linspace(0.05, 0.7, 30)
-h_values = np.linspace(0, 0.6, 30)
-
-# Initialize a matrix to store the results
-results = np.zeros((len(prb_values), len(h_values)))
-
-x0 = 0.3
-# Loop over the ranges of prb and p_bb
-for i, prb in enumerate(prb_values):
-    for j, h in enumerate(h_values):
-        h2val1 = (h-alpha*homsliceval)/(1-alpha)
-        # Calculate critical probabilities for h1 = 0
-        p_rr_crit_h1, hom1 = getslice([homsliceval], [h2val1], p_rr, factor*p_rr, prb, N, Nr, M, alpha, c1, c2,x0)
-        if not np.isnan(p_rr_crit_h1[0]):
-            x0 = p_rr_crit_h1[0]
-        h1val2 = (h-(1-alpha)*homsliceval)/alpha
-        p_rr_crit_h2, hom1 = getslice([h1val2], [homsliceval], p_rr, factor*p_rr, prb, N, Nr, M, alpha, c1, c2,x0)
-        # Store the result
-        results[i, j] = p_rr_crit_h1[0]-p_rr_crit_h2[0]
-
-# Create the area plot
-plt.rcParams.update({'font.size': 22})
-fig, ax = plt.subplots(figsize=(10, 6))
-X, Y = np.meshgrid(prb_values, h_values)
-
-# Use a diverging colormap from ColorBrewer
-cmap = plt.colormaps.get_cmap('coolwarm')
-norm = TwoSlopeNorm(vmin=np.nanmin(results), vcenter=0, vmax=np.nanmax(results))
-
-contour = ax.contourf(X, Y, results.T, levels=100, cmap=cmap, norm=norm)
-cbar = fig.colorbar(contour, ax=ax, label='Difference in Critical Probabilities')
-# Finalize plot
-plt.rc('font', size=18)          # controls default text sizes
-plt.rc('axes', titlesize=20)     # fontsize of the axes title
-plt.rc('axes', labelsize=20)     # fontsize of the x and y labels
-plt.rc('xtick', labelsize=18)    # fontsize of the tick labels
-plt.rc('ytick', labelsize=18)    # fontsize of the tick labels
-plt.rc('legend', fontsize=18)    # legend fontsize
-
-plt.xlabel('$\pi_{rb}$',fontsize=20)
-plt.ylabel('$h$',fontsize=20)
-plt.tight_layout()
-#plt.grid(True)
-
-# Ensure the directory exists
-output_dir = 'figs'
-os.makedirs(output_dir, exist_ok=True)
 
 
+critvec = critical_prr(combinations, prb_pbb_combinations, N, Nr, M, alpha, c1, c2)
+print(critvec)
 
+Data = [combinations, prb_pbb_combinations, critvec]
 
-# Save the figure
-output_file = os.path.join(output_dir, 'cont_area_plot_prb_h_slice_'+str(homsliceval)+'alpha_'+str(alpha)+'_uneq.pdf')
-plt.savefig(output_file)
+# Save the data
+data_filename = 'data/critical_vectors'+'_N_'+str(c1)+'_'+ str(Nr/N)+'_av_degree_'+str(ave_degree)+'alpha_'+str(alpha)+'.pkl'
 
-
-
-# Save the data using pickle
-Data = [X,Y,results]
-data_filename = os.path.join('data', f'area_plot_prb_h_slice_{homsliceval}_alpha_{alpha}_uneq_data_{timestamp}.pkl')
 with open(data_filename, 'wb') as f:
     pickle.dump(Data, f)
 
-plt.show()
-
-
-# # Compute F1, F2, and prbvec for all combinations of h1 and h2
-# for (h2,h1) in combinations:
-
-#     F1 = F_maximum_entropy(c1, h1, Nr / N)
-#     F2 = F_maximum_entropy(c2, h2, Nr / N)
-#     print(h1, h2, F1, F2)
-
-#     mat = B_matrix(F1, F2, p_rr, p_bb, prb, N, Nr, alpha*M, (1-alpha)*M) - sp.eye(2 * (c1 + c2 + 2))
-#     p_rrmin = critical_prr([(h1,h2)],[(prb,0)], N, Nr, M, alpha, c1, c2)
-#     print(p_rrmin)
-#     xs = np.linspace(0,1,50)
-#     prbvec = []
-    
-#     x_zero = 0.01
-#     for pr in xs:
-#         mat2 = mat.subs(p_rr, pr)
-#         root = fsolve(determinant_matrix, x0 = x_zero, args = mat2)
-#         quality = determinant_matrix(root,mat2)
-#         if root>0 and root<1 and abs(quality)<1e-5:
-#             eigenvals, eigenvecs = np.linalg.eig(np.array(mat2.subs(p_bb,root[0])).astype(np.float64))
-#             # Find the eigenvector corresponding to the eigenvalue zero
-#             zero_eigenvalue_index = np.where(np.isclose(eigenvals, 0))[0]
-#             if zero_eigenvalue_index.size > 0:
-#                 zero_eigenvector = eigenvecs[:, zero_eigenvalue_index[0]]
-#                 if np.all(zero_eigenvector >= 0) or np.all(zero_eigenvector <= 0):
-#                     prbvec.append((pr, root[0]))
-#                     print(pr, root[0], quality)
-#         # for pb in (x * 0.02 for x in range(0, 50)):
-#         #     mat2 = mat2.subs(p_bb, pb)
-#         #     if abs(mat2.det()) < 0.01:
-#         #         prbvec.append((pr, pb))
-#         #         print(pr, pb, mat2.det())
-#         #         break
-#     # Plotting the entries in prbvec
-#     pr_values = [pr for pr, pb in prbvec]
-#     pb_values = [pb for pr, pb in prbvec]
-
-#     plt.plot(pr_values, pb_values, label=f'$h_1$={h1}, $h_2$={h2}')
-
-# # Finalize plot
-# plt.rc('font', size=18)          # controls default text sizes
-# plt.rc('axes', titlesize=20)     # fontsize of the axes title
-# plt.rc('axes', labelsize=20)     # fontsize of the x and y labels
-# plt.rc('xtick', labelsize=18)    # fontsize of the tick labels
-# plt.rc('ytick', labelsize=18)    # fontsize of the tick labels
-# plt.rc('legend', fontsize=18)    # legend fontsize
-
-# plt.xlabel('$p_{rr}$')
-# plt.ylabel('$p_{bb}$')
-# plt.grid(True)
-# plt.legend()
-# plt.axis([0, 1, 0, 0.5])
-
-# # Create figs directory if it does not exist
-# if not os.path.exists('figs'):
-#     os.makedirs('figs')
-
-# # Create data directory if it does not exist
-# if not os.path.exists('data'):
-#     os.makedirs('data')
-
-# # Save the figure
-# fig_filename = os.path.join('figs', f'p_rb={prb}_critical_percolation_{timestamp}.pdf')
-# plt.savefig(fig_filename, bbox_inches='tight')
-
-
-# # Save the data using pickle
-# Data = [[pr_values],[pb_values]]
-# data_filename = os.path.join('data', f'p_rb={prb}_critical_percolation_data_{timestamp}.pkl')
-# with open(data_filename, 'wb') as f:
-#     pickle.dump(Data, f)
-
-# print('done', datetime.now().strftime('%Y-%m-%d_%H-%M-%S'))
-# plt.show()
-
-# # h1vec = [0.1* x for x in range(0, 11)]
-# # h2vec = [0.1* x for x in range(0, 11)]
-
-
-# # probmat = np.zeros((len(h1vec),len(h2vec)))
-# # for (i,h1) in enumerate(h1vec):
-# #     F1 = F_maximum_entropy(c1, h1, Nr / N)
-# #     for (j,h2) in enumerate(h2vec):
-# #         F2 = F_maximum_entropy(c2, h2, Nr / N)
-# #         mat = B_matrix(F1, F2, p_bb, p_bb, 0.1, N, Nr, alpha*M, (1-alpha)*M) - sp.eye(2 * (c1 + c2 + 2))
-# #         root = fsolve(determinant_matrix, x0 = 0.2, args = mat)
-# #         quality = determinant_matrix(root,mat)
-# #         if root>0 and root<1 and abs(quality)<1e-10:
-# #             probmat[i,j] = root[0]
-# #             print(h1, h2, root[0], quality)
-
-# # # Plotting the heatmap
-# # plt.figure(figsize=(8, 6))
-# # plt.imshow(probmat, cmap='hot', interpolation='nearest', aspect='auto')
-# # plt.colorbar(label='Probability')
-# # plt.xlabel('$h_2$')
-# # plt.ylabel('$h_1$')
-# # plt.xticks(ticks=np.arange(len(h2vec)), labels=[f'{h2:.1f}' for h2 in h2vec])
-# # plt.yticks(ticks=np.arange(len(h1vec)), labels=[f'{h1:.1f}' for h1 in h1vec])
-# # plt.show()
