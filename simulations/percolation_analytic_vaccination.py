@@ -10,6 +10,11 @@ from scipy.optimize import fsolve
 from scipy import linalg
 
 
+
+abspath = os.path.abspath(__file__)
+dname = os.path.dirname(abspath)
+os.chdir(dname)
+
 # Define the symbolic variables
 p_success = sp.Symbol('p_success')
 p_failure = sp.Symbol('p_failure')
@@ -372,11 +377,11 @@ timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
 
 N = 5*10**5
 Nr = 0.6*N
-ave_degree = 3
-alpha = 0.05
+ave_degree = 2
+alpha = alpha_star(c1, c2)
 M = ave_degree * N / ((1-alpha)*(c2 * (c2 - 1))+(alpha*c1 * (c1 - 1)))
 
-efficacy = 0.5
+efficacy = 0.1
 intra_efficacy = 0.5
 
 
@@ -412,7 +417,7 @@ for i, h1 in enumerate(h1_values):
         if p_rr_matrix[i,j] is not None and p_rr_matrix[i,j] is not np.nan:
             x_zero = p_rr_matrix[i,j]
 # Save the data
-np.save('data/critical_vaccination'+'_'+'_N_'+str(c1)+'_'+ str(Nr/N)+'_efficacy_'+str(efficacy)+'_effintra_'+str(intra_efficacy)+'alphalow.npy', p_rr_matrix)
+np.save('data/critical_vaccination'+'_'+'_N_'+str(c1)+'_'+ str(Nr/N)+'_efficacy_'+str(efficacy)+'_effintra_'+str(intra_efficacy)+'alphastar.npy', p_rr_matrix)
 
 # Plotting
 plt.figure(figsize=(4, 3))
@@ -425,7 +430,7 @@ plt.ylabel('$h_4$')
 plt.tight_layout()
 
 # Save the figure
-plt.savefig('figs/critical_vaccinatin'+'_N_'+str(c1)+'_frac'+str(Nr/N)+'_efficacy_'+str(efficacy)+'_effintra_'+str(intra_efficacy)+'alphalow.pdf')
+plt.savefig('figs/critical_vaccinatin'+'_N_'+str(c1)+'_frac'+str(Nr/N)+'_efficacy_'+str(efficacy)+'_effintra_'+str(intra_efficacy)+'alphastar.pdf')
 plt.show()
 
 

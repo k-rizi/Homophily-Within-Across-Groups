@@ -430,8 +430,8 @@ M = ave_degree * N / ((1-alpha)*(c2 * (c2 - 1))+(alpha*c1 * (c1 - 1)))
 homsliceval = 0.5
 
 # Define the range for prb and p_bb
-prb_values = np.linspace(0.02, 0.7, 20)
-p_bb_values = np.linspace(0.02, 0.7, 20)
+prb_values = np.linspace(0.02, 0.7, 80)
+p_bb_values = np.linspace(0.02, 0.7, 80)
 
 # Initialize a matrix to store the results
 results = np.zeros((len(prb_values), len(p_bb_values)))
@@ -484,8 +484,12 @@ plt.tight_layout()
 output_dir = 'figs'
 os.makedirs(output_dir, exist_ok=True)
 
+# Save the data
+pickle.dump([prb_values, p_bb_values, results], open('data/'+'area_plot_prb_pbb_homval_'+str(homsliceval)+'.pkl', 'wb'))
+
+
 # Save the figure
-output_file = os.path.join(output_dir, 'area_plot_prb_pbb_homval_'+str(homsliceval)+'.pdf')
+output_file = os.path.join(output_dir, 'area_plot_prb_pbb_homval_'+str(homsliceval)+'_.pdf')
 plt.savefig(output_file)
 plt.show()
 
