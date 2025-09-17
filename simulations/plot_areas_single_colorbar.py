@@ -9,6 +9,8 @@ abspath = os.path.abspath(__file__)
 dname = os.path.dirname(abspath)
 os.chdir(dname)
 
+
+#Compare the difference in critical probabilities for networks with the same homophily $h$, but different local homophilies.
 # Define the file paths for the pickle data files
 file_paths = [
     'data/area_plot_prb_h_slice_0.5_alpha_0.14285714285714285_data_2024-11-14_11-35-29.pkl',

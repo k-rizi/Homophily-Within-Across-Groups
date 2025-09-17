@@ -1,83 +1,95 @@
+#Code to generate the data for Fig 3e, f, g
+# --------------------------------------------------
+# Imports and Environment Setup
+# --------------------------------------------------
 import sympy as sp
 import numpy as np
 import math, os, pickle
 from datetime import datetime
 import matplotlib.pyplot as plt
-from scipy.optimize import minimize
-from scipy.optimize import fsolve
-
-
+from scipy.optimize import minimize, fsolve
 from scipy import linalg
 
-
-
+# Set working directory to script location
 abspath = os.path.abspath(__file__)
 dname = os.path.dirname(abspath)
 os.chdir(dname)
 
-# Define the symbolic variables
+# --------------------------------------------------
+# Symbolic Variables for Percolation Probabilities
+# --------------------------------------------------
 p_success = sp.Symbol('p_success')
 p_failure = sp.Symbol('p_failure')
+p_rr = sp.Symbol('p_rr')  # Probability of red-red edge
+p_bb = sp.Symbol('p_bb')  # Probability of blue-blue edge
+p_rb = sp.Symbol('p_rb')  # Probability of red-blue edge
 
-# Define the symbolic variables
-p_rr = sp.Symbol('p_rr')
-p_bb = sp.Symbol('p_bb')
-p_rb = sp.Symbol('p_rb')
 
 
 def clique_h_index(c, i, frac_red):
     """
-    Compute the Coleman homophily index of a clique.
+    Calculate the Coleman homophily index for a clique.
 
-    Parameters:
-    c (int): Number of nodes in the clique
-    i (int): Number of red nodes in the clique
-    frac_red (float): Fraction of red nodes globally
+    Args:
+        c (int): Number of nodes in the clique.
+        i (int): Number of red nodes in the clique.
+        frac_red (float): Fraction of red nodes in the whole network.
 
     Returns:
-    float: Coleman homophily index of clique type-i (variant)
+        float: Homophily index for the clique.
     """
     expin = frac_red**2 + (1 - frac_red)**2
     in_group = (math.comb(i, 2) + math.comb(c - i, 2)) / math.comb(c, 2)
     return (in_group - expin) / (1 - expin)
 
 # Compute the maximum entropy clique distribution
+
 def F_maximum_entropy(c, h, frac_red):
     """
-    Compute the clique probability distribution vector F = [F_0,...,F_c].
+    Compute the maximum entropy probability distribution for cliques of size c,
+    given a target local homophily h and global red fraction frac_red.
 
-    Parameters:
-    c (int): Clique size
-    h (float): Local homophily we want
-    frac_red (float): Fraction of red nodes globally
+    Args:
+        c (int): Clique size.
+        h (float): Desired local homophily.
+        frac_red (float): Fraction of red nodes globally.
 
     Returns:
-    list: Clique probability distribution vector
+        list: Probability distribution over clique compositions.
     """
     def objective(vars):
         lam, theta = vars
         Z = sum([math.exp(theta * clique_h_index(c, i, frac_red) + i * lam) for i in range(c + 1)])
         F = [math.exp(theta * clique_h_index(c, i, frac_red) + i * lam) / Z for i in range(c + 1)]
-
         f1 = sum([i * F[i] for i in range(c + 1)]) - c * frac_red
         f2 = sum([clique_h_index(c, i, frac_red) * F[i] for i in range(c + 1)]) - h
         return f1**2 + f2**2
 
     initial_guess = [0., 0.]
     result = minimize(objective, initial_guess, bounds=[(-10, 10), (-10, 10)], tol=1e-9)
-
     lam_sol, theta_sol = result.x
-
     F = [math.exp(theta_sol * clique_h_index(c, i, frac_red) + i * lam_sol) for i in range(c + 1)]
     Z = sum(F)
     F = [Fi / Z for Fi in F]
-
     return F
 
 # Compute the probability of a clique with a given number of red nodes and blue nodes to remain connected after percolation starting at color start_type
-def compute_probability_con_color(dr,db, p_rr, p_bb, p_rb, start_type):
-    # Base case
-    if dr+db==1:
+
+def compute_probability_con_color(dr, db, p_rr, p_bb, p_rb, start_type):
+    """
+    Recursively compute the probability that a clique with dr red and db blue nodes
+    remains connected after percolation, starting from a given color.
+
+    Args:
+        dr (int): Number of red nodes.
+        db (int): Number of blue nodes.
+        p_rr, p_bb, p_rb: Percolation probabilities for edge types.
+        start_type (str): 'r' or 'b', color to start from.
+
+    Returns:
+        sympy expression: Probability of connectivity.
+    """
+    if dr + db == 1:
         return sp.Integer(1)
     if start_type == 'r':
         i_r = 1
@@ -85,60 +97,90 @@ def compute_probability_con_color(dr,db, p_rr, p_bb, p_rb, start_type):
     else:
         i_r = 0
         i_b = 1
-
-    # Compute the probability using the binomial distribution
     probability = 0
-    for i in range(i_r, dr+1):
-        for j in range(i_b, db+1):
-            if i ==dr and j == db:
-                return 1-probability
-            probability += sp.binomial(dr-i_r, i-i_r) *sp.binomial(db-i_b, j-i_b) * compute_probability_con_color(i,j, p_rr, p_bb, p_rb, start_type) * ((1-p_rr) ** (i * (dr-i)))* ((1-p_bb) ** (j * (db-j)))* ((1-p_rb) ** (i*(db-j)+j* (dr-i)))
+    for i in range(i_r, dr + 1):
+        for j in range(i_b, db + 1):
+            if i == dr and j == db:
+                return 1 - probability
+            probability += (
+                sp.binomial(dr - i_r, i - i_r)
+                * sp.binomial(db - i_b, j - i_b)
+                * compute_probability_con_color(i, j, p_rr, p_bb, p_rb, start_type)
+                * ((1 - p_rr) ** (i * (dr - i)))
+                * ((1 - p_bb) ** (j * (db - j)))
+                * ((1 - p_rb) ** (i * (db - j) + j * (dr - i)))
+            )
     probability = 1 - probability
-
     return probability
 
 # Compute the probability of a clique with a given number of red nodes and blue nodes to remain connected to kr red nodes and kb blue nodes after percolation starting at color start_type
-def compute_probability_con_color_uneq(dr,db,kr,kb, p_rr, p_bb, p_rb, start_type):
+
+def compute_probability_con_color_uneq(dr, db, kr, kb, p_rr, p_bb, p_rb, start_type):
+    """
+    Compute the probability that a clique with dr red and db blue nodes
+    remains connected to exactly kr red and kb blue nodes after percolation.
+    Args:
+        dr, db: Initial red/blue node counts.
+        kr, kb: Target red/blue node counts after percolation.
+        p_rr, p_bb, p_rb: Percolation probabilities.
+        start_type: Starting color ('r' or 'b').
+    Returns:
+        sympy expression: Probability of this outcome.
+    """
     if start_type == 'r':
         i_r = 1
         i_b = 0
     else:
         i_r = 0
         i_b = 1
-    probability = sp.binomial(dr-i_r, kr-i_r) *sp.binomial(db-i_b, kb-i_b) * compute_probability_con_color(kr,kb, p_rr, p_bb, p_rb,start_type) * ((1-p_rr) ** (kr * (dr-kr)))* ((1-p_bb) ** (kb * (db-kb)))* ((1-p_rb) ** (kr*(db-kb)+kb*(dr-kr)))
-
+    probability = (
+        sp.binomial(dr - i_r, kr - i_r)
+        * sp.binomial(db - i_b, kb - i_b)
+        * compute_probability_con_color(kr, kb, p_rr, p_bb, p_rb, start_type)
+        * ((1 - p_rr) ** (kr * (dr - kr)))
+        * ((1 - p_bb) ** (kb * (db - kb)))
+        * ((1 - p_rb) ** (kr * (db - kb) + kb * (dr - kr)))
+    )
     return probability
+
 
 def compute_probability_con(d, p_success, p_failure):
-    # Base case
+    """
+    Recursively compute the probability that a clique of size d remains connected
+    after percolation with given success/failure probabilities.
+    """
     if d == 1:
         return 1
-
-    # Compute the probability using the binomial distribution
     probability = 0
     for i in range(1, d):
-        probability += sp.binomial(d-1, i-1) * compute_probability_con(i,  p_success, p_failure) * (p_failure ** (i * (d-i)))
+        probability += sp.binomial(d - 1, i - 1) * compute_probability_con(i, p_success, p_failure) * (p_failure ** (i * (d - i)))
     probability = 1 - probability
-
     return probability
+
 
 def compute_probability_con_uneq(d, k, p_success, p_failure):
-    # Compute the probability using the binomial distribution
-
-    probability = sp.binomial(d-1, k-1)* compute_probability_con(k,  p_success, p_failure) * (p_failure ** (k * (d-k)))
-
+    """
+    Compute the probability that a clique of size d remains connected to exactly k nodes after percolation.
+    """
+    probability = sp.binomial(d - 1, k - 1) * compute_probability_con(k, p_success, p_failure) * (p_failure ** (k * (d - k)))
     return probability
 
+
 def clique_perc_avg(k, p_success, p_failure):
-    # Compute the average connectivity of a clique after percolation
+    """
+    Compute the average number of edges in a clique of size k after percolation.
+    """
     avg = 0
-    for i in range(2, k+1):
-        avg  += (i-1)*compute_probability_con_uneq(k, i, p_success, p_failure)
+    for i in range(2, k + 1):
+        avg += (i - 1) * compute_probability_con_uneq(k, i, p_success, p_failure)
     return avg
 
 # Compue the average number of target_type colored nodes in a clique with dr red and db blue nodes after percolation
-def clique_perc_avg_color(dr,db, p_rr, p_bb, p_rb,start_type, target_type):
-    # Compute the average connectivity of a clique after percolation
+
+def clique_perc_avg_color(dr, db, p_rr, p_bb, p_rb, start_type, target_type):
+    """
+    Compute the average number of nodes of target_type in a clique with dr red and db blue nodes after percolation.
+    """
     avg = 0
     if start_type == 'r':
         i_r = 1
@@ -146,27 +188,28 @@ def clique_perc_avg_color(dr,db, p_rr, p_bb, p_rb,start_type, target_type):
     else:
         i_r = 0
         i_b = 1
-
     if target_type == 'r':
         i_r_t = 1
         i_b_t = 0
     else:
         i_r_t = 0
         i_b_t = 1
-
-    for i in range(i_r, dr+1):
-        for j in range(i_b,db+1):
-            avg  += ((i-i_r)*i_r_t+(j-i_b)*i_b_t)*compute_probability_con_color_uneq(dr, db, i, j, p_rr, p_bb, p_rb,start_type)
+    for i in range(i_r, dr + 1):
+        for j in range(i_b, db + 1):
+            avg += ((i - i_r) * i_r_t + (j - i_b) * i_b_t) * compute_probability_con_color_uneq(dr, db, i, j, p_rr, p_bb, p_rb, start_type)
     return avg
 
+
 def F_biased(F):
-    F_red = [0]*len(F)
-    F_blue = [0]*len(F)
+    """
+    Compute the expected number of red and blue nodes for each clique type in distribution F.
+    Returns two lists: F_red and F_blue.
+    """
+    F_red = [0] * len(F)
+    F_blue = [0] * len(F)
     for i in range(len(F)):
-        F_red[i] += i*F[i]
-        F_blue[i] += (len(F)-i-1)*F[i]
-    #F_red = [F_red[i]/sum(F_red) for i in range(len(F_red))]
-    #F_blue = [F_blue[i]/sum(F_blue) for i in range(len(F_blue))]
+        F_red[i] += i * F[i]
+        F_blue[i] += (len(F) - i - 1) * F[i]
     return F_red, F_blue
 
 # # Substitute the values of p_success and p_failure

@@ -1,85 +1,96 @@
+
+# ---------------------------------------------
+# Imports and Environment Setup
+# ---------------------------------------------
 import sympy as sp
 import numpy as np
 import math, os, pickle
 from datetime import datetime
 import matplotlib.pyplot as plt
-from scipy.optimize import minimize
-from scipy.optimize import fsolve
-from matplotlib.colors import Normalize, TwoSlopeNorm
+from scipy.optimize import minimize, fsolve
+from matplotlib.colors import TwoSlopeNorm
 from matplotlib.patches import Patch
 import matplotlib.cm as cm
+from scipy import linalg
 
+# Set working directory to script location
 abspath = os.path.abspath(__file__)
 dname = os.path.dirname(abspath)
 os.chdir(dname)
 
-
-from scipy import linalg
-
-
-# Define the symbolic variables
+# ---------------------------------------------
+# Symbolic Variables for Percolation Probabilities
+# ---------------------------------------------
 p_success = sp.Symbol('p_success')
 p_failure = sp.Symbol('p_failure')
+p_rr = sp.Symbol('p_rr')  # Probability of red-red edge
+p_bb = sp.Symbol('p_bb')  # Probability of blue-blue edge
+p_rb = sp.Symbol('p_rb')  # Probability of red-blue edge
 
-# Define the symbolic variables
-p_rr = sp.Symbol('p_rr')
-p_bb = sp.Symbol('p_bb')
-p_rb = sp.Symbol('p_rb')
 
 
 def clique_h_index(c, i, frac_red):
     """
-    Compute the Coleman homophily index of a clique.
+    Calculate the Coleman homophily index for a clique.
 
-    Parameters:
-    c (int): Number of nodes in the clique
-    i (int): Number of red nodes in the clique
-    frac_red (float): Fraction of red nodes globally
+    Args:
+        c (int): Number of nodes in the clique.
+        i (int): Number of red nodes in the clique.
+        frac_red (float): Fraction of red nodes in the whole network.
 
     Returns:
-    float: Coleman homophily index of clique type-i (variant)
+        float: Homophily index for the clique.
     """
     expin = frac_red**2 + (1 - frac_red)**2
     in_group = (math.comb(i, 2) + math.comb(c - i, 2)) / math.comb(c, 2)
     return (in_group - expin) / (1 - expin)
 
-# Compute the maximum entropy clique distribution
+
 def F_maximum_entropy(c, h, frac_red):
     """
-    Compute the clique probability distribution vector F = [F_0,...,F_c].
+    Compute the maximum entropy probability distribution for cliques of size c,
+    given a target local homophily h and global red fraction frac_red.
 
-    Parameters:
-    c (int): Clique size
-    h (float): Local homophily we want
-    frac_red (float): Fraction of red nodes globally
+    Args:
+        c (int): Clique size.
+        h (float): Desired local homophily.
+        frac_red (float): Fraction of red nodes globally.
 
     Returns:
-    list: Clique probability distribution vector
+        list: Probability distribution over clique compositions.
     """
     def objective(vars):
         lam, theta = vars
         Z = sum([math.exp(theta * clique_h_index(c, i, frac_red) + i * lam) for i in range(c + 1)])
         F = [math.exp(theta * clique_h_index(c, i, frac_red) + i * lam) / Z for i in range(c + 1)]
-
         f1 = sum([i * F[i] for i in range(c + 1)]) - c * frac_red
         f2 = sum([clique_h_index(c, i, frac_red) * F[i] for i in range(c + 1)]) - h
         return f1**2 + f2**2
 
     initial_guess = [0., 0.]
     result = minimize(objective, initial_guess, bounds=[(-10, 10), (-10, 10)], tol=1e-9)
-
     lam_sol, theta_sol = result.x
-
     F = [math.exp(theta_sol * clique_h_index(c, i, frac_red) + i * lam_sol) for i in range(c + 1)]
     Z = sum(F)
     F = [Fi / Z for Fi in F]
-
     return F
 
-# Compute the probability of a clique with a given number of red nodes and blue nodes to remain connected after percolation starting at color start_type
-def compute_probability_con_color(dr,db, p_rr, p_bb, p_rb, start_type):
-    # Base case
-    if dr+db==1:
+
+def compute_probability_con_color(dr, db, p_rr, p_bb, p_rb, start_type):
+    """
+    Recursively compute the probability that a clique with dr red and db blue nodes
+    remains connected after percolation, starting from a given color.
+
+    Args:
+        dr (int): Number of red nodes.
+        db (int): Number of blue nodes.
+        p_rr, p_bb, p_rb: Percolation probabilities for edge types.
+        start_type (str): 'r' or 'b', color to start from.
+
+    Returns:
+        sympy expression: Probability of connectivity.
+    """
+    if dr + db == 1:
         return sp.Integer(1)
     if start_type == 'r':
         i_r = 1
@@ -87,60 +98,89 @@ def compute_probability_con_color(dr,db, p_rr, p_bb, p_rb, start_type):
     else:
         i_r = 0
         i_b = 1
-
-    # Compute the probability using the binomial distribution
     probability = 0
-    for i in range(i_r, dr+1):
-        for j in range(i_b, db+1):
-            if i ==dr and j == db:
-                return 1-probability
-            probability += sp.binomial(dr-i_r, i-i_r) *sp.binomial(db-i_b, j-i_b) * compute_probability_con_color(i,j, p_rr, p_bb, p_rb, start_type) * ((1-p_rr) ** (i * (dr-i)))* ((1-p_bb) ** (j * (db-j)))* ((1-p_rb) ** (i*(db-j)+j* (dr-i)))
+    for i in range(i_r, dr + 1):
+        for j in range(i_b, db + 1):
+            if i == dr and j == db:
+                return 1 - probability
+            probability += (
+                sp.binomial(dr - i_r, i - i_r)
+                * sp.binomial(db - i_b, j - i_b)
+                * compute_probability_con_color(i, j, p_rr, p_bb, p_rb, start_type)
+                * ((1 - p_rr) ** (i * (dr - i)))
+                * ((1 - p_bb) ** (j * (db - j)))
+                * ((1 - p_rb) ** (i * (db - j) + j * (dr - i)))
+            )
     probability = 1 - probability
-
     return probability
 
 # Compute the probability of a clique with a given number of red nodes and blue nodes to remain connected to kr red nodes and kb blue nodes after percolation starting at color start_type
-def compute_probability_con_color_uneq(dr,db,kr,kb, p_rr, p_bb, p_rb, start_type):
+
+def compute_probability_con_color_uneq(dr, db, kr, kb, p_rr, p_bb, p_rb, start_type):
+    """
+    Compute the probability that a clique with dr red and db blue nodes
+    remains connected to exactly kr red and kb blue nodes after percolation.
+    Args:
+        dr, db: Initial red/blue node counts.
+        kr, kb: Target red/blue node counts after percolation.
+        p_rr, p_bb, p_rb: Percolation probabilities.
+        start_type: Starting color ('r' or 'b').
+    Returns:
+        sympy expression: Probability of this outcome.
+    """
     if start_type == 'r':
         i_r = 1
         i_b = 0
     else:
         i_r = 0
         i_b = 1
-    probability = sp.binomial(dr-i_r, kr-i_r) *sp.binomial(db-i_b, kb-i_b) * compute_probability_con_color(kr,kb, p_rr, p_bb, p_rb,start_type) * ((1-p_rr) ** (kr * (dr-kr)))* ((1-p_bb) ** (kb * (db-kb)))* ((1-p_rb) ** (kr*(db-kb)+kb*(dr-kr)))
-
+    probability = (
+        sp.binomial(dr - i_r, kr - i_r)
+        * sp.binomial(db - i_b, kb - i_b)
+        * compute_probability_con_color(kr, kb, p_rr, p_bb, p_rb, start_type)
+        * ((1 - p_rr) ** (kr * (dr - kr)))
+        * ((1 - p_bb) ** (kb * (db - kb)))
+        * ((1 - p_rb) ** (kr * (db - kb) + kb * (dr - kr)))
+    )
     return probability
+
 
 def compute_probability_con(d, p_success, p_failure):
-    # Base case
+    """
+    Recursively compute the probability that a clique of size d remains connected
+    after percolation with given success/failure probabilities.
+    """
     if d == 1:
         return 1
-
-    # Compute the probability using the binomial distribution
     probability = 0
     for i in range(1, d):
-        probability += sp.binomial(d-1, i-1) * compute_probability_con(i,  p_success, p_failure) * (p_failure ** (i * (d-i)))
+        probability += sp.binomial(d - 1, i - 1) * compute_probability_con(i, p_success, p_failure) * (p_failure ** (i * (d - i)))
     probability = 1 - probability
-
     return probability
+
 
 def compute_probability_con_uneq(d, k, p_success, p_failure):
-    # Compute the probability using the binomial distribution
-
-    probability = sp.binomial(d-1, k-1)* compute_probability_con(k,  p_success, p_failure) * (p_failure ** (k * (d-k)))
-
+    """
+    Compute the probability that a clique of size d remains connected to exactly k nodes after percolation.
+    """
+    probability = sp.binomial(d - 1, k - 1) * compute_probability_con(k, p_success, p_failure) * (p_failure ** (k * (d - k)))
     return probability
 
+
 def clique_perc_avg(k, p_success, p_failure):
-    # Compute the average connectivity of a clique after percolation
+    """
+    Compute the average number of edges in a clique of size k after percolation.
+    """
     avg = 0
-    for i in range(2, k+1):
-        avg  += (i-1)*compute_probability_con_uneq(k, i, p_success, p_failure)
+    for i in range(2, k + 1):
+        avg += (i - 1) * compute_probability_con_uneq(k, i, p_success, p_failure)
     return avg
 
-# Compue the average number of target_type colored nodes in a clique with dr red and db blue nodes after percolation
-def clique_perc_avg_color(dr,db, p_rr, p_bb, p_rb,start_type, target_type):
-    # Compute the average connectivity of a clique after percolation
+
+def clique_perc_avg_color(dr, db, p_rr, p_bb, p_rb, start_type, target_type):
+    """
+    Compute the average number of nodes of target_type in a clique with dr red and db blue nodes after percolation.
+    """
     avg = 0
     if start_type == 'r':
         i_r = 1
@@ -148,27 +188,28 @@ def clique_perc_avg_color(dr,db, p_rr, p_bb, p_rb,start_type, target_type):
     else:
         i_r = 0
         i_b = 1
-
     if target_type == 'r':
         i_r_t = 1
         i_b_t = 0
     else:
         i_r_t = 0
         i_b_t = 1
-
-    for i in range(i_r, dr+1):
-        for j in range(i_b,db+1):
-            avg  += ((i-i_r)*i_r_t+(j-i_b)*i_b_t)*compute_probability_con_color_uneq(dr, db, i, j, p_rr, p_bb, p_rb,start_type)
+    for i in range(i_r, dr + 1):
+        for j in range(i_b, db + 1):
+            avg += ((i - i_r) * i_r_t + (j - i_b) * i_b_t) * compute_probability_con_color_uneq(dr, db, i, j, p_rr, p_bb, p_rb, start_type)
     return avg
 
+
 def F_biased(F):
-    F_red = [0]*len(F)
-    F_blue = [0]*len(F)
+    """
+    Compute the expected number of red and blue nodes for each clique type in distribution F.
+    Returns two lists: F_red and F_blue.
+    """
+    F_red = [0] * len(F)
+    F_blue = [0] * len(F)
     for i in range(len(F)):
-        F_red[i] += i*F[i]
-        F_blue[i] += (len(F)-i-1)*F[i]
-    #F_red = [F_red[i]/sum(F_red) for i in range(len(F_red))]
-    #F_blue = [F_blue[i]/sum(F_blue) for i in range(len(F_blue))]
+        F_red[i] += i * F[i]
+        F_blue[i] += (len(F) - i - 1) * F[i]
     return F_red, F_blue
 
 # # Substitute the values of p_success and p_failure
@@ -178,13 +219,25 @@ def F_biased(F):
 
 # print(probability)
 
-# progeny matrix of the percolation process
-def B_matrix(F, F2,p_rr, p_bb, p_rb,N, Nr, M1, M2):
-    c = len(F)-1
-    c2 = len(F2)-1
-    F_red,F_blue = F_biased(F)
-    F_red2,F_blue2 = F_biased(F2)
-    B = sp.ones(2*(c+4),2*(c+4))
+## ------------------------------------------------------------------------
+# Matrix Construction for Percolation Process
+## ------------------------------------------------------------------------
+def B_matrix(F, F2, p_rr, p_bb, p_rb, N, Nr, M1, M2):
+    """
+    Construct the progeny matrix B for the percolation process, encoding expected offspring counts for each clique type and color.
+    Args:
+        F, F2: Clique distributions for two group types.
+        p_rr, p_bb, p_rb: Percolation probabilities.
+        N, Nr: Total nodes and red nodes.
+        M1, M2: Scaling factors for each group.
+    Returns:
+        sympy Matrix: Progeny matrix.
+    """
+    c = len(F) - 1
+    c2 = len(F2) - 1
+    F_red, F_blue = F_biased(F)
+    F_red2, F_blue2 = F_biased(F2)
+    B = sp.ones(2 * (c + 4), 2 * (c + 4))
     for i in range(c+1):
         for j in range(c+1):
             B[i,j] =M1 /Nr *F_red[j]*clique_perc_avg_color(i,c-i, p_rr, p_bb, p_rb,'r','r')
@@ -240,8 +293,13 @@ def B_matrix(F, F2,p_rr, p_bb, p_rb,N, Nr, M1, M2):
     return B
 
 
-#For faster execution, we cache the values of clique_perc_avg_color
-def B_matrix_cached(F, F2,p_rr, p_bb, p_rb,N, Nr, M1, M2,cachesc1,cachesc2):
+## ------------------------------------------------------------------------
+# Cached Matrix Construction for Performance
+## ------------------------------------------------------------------------
+def B_matrix_cached(F, F2, p_rr, p_bb, p_rb, N, Nr, M1, M2, cachesc1, cachesc2):
+    """
+    Construct the progeny matrix B using cached clique_perc_avg_color values for speed.
+    """
     c = len(F)-1
     c2 = len(F2)-1
     F_red,F_blue = F_biased(F)
@@ -304,47 +362,70 @@ def B_matrix_cached(F, F2,p_rr, p_bb, p_rb,N, Nr, M1, M2,cachesc1,cachesc2):
 
     return B
 
-def determinant_matrix(pb,B):
-    mat = B.subs(p_bb,pb[0])
+
+def determinant_matrix(pb, B):
+    """
+    Substitute p_bb in matrix B and return its determinant.
+    """
+    mat = B.subs(p_bb, pb[0])
     temp = np.array(mat).astype(np.float64)
     return np.linalg.det(temp)
 
+
 def alpha_star(c, c2=2):
+    """
+    Compute the optimal mixing parameter alpha for clique sizes c and c2.
+    """
     numerator = c2 * (c2 - 1)
     denominator = c2 * (c2 - 1) + c * (c - 1)
     return numerator / denominator
 
-def determinant_matrix_red(pr,  B):
-    mat = B.subs(p_rr,pr[0])
+
+def determinant_matrix_red(pr, B):
+    """
+    Substitute p_rr in matrix B and return its determinant.
+    """
+    mat = B.subs(p_rr, pr[0])
     temp = np.array(mat).astype(np.float64)
     return np.linalg.det(temp)
 
-def determinant_matrix_f(pr,  f):
+
+def determinant_matrix_f(pr, f):
+    """
+    Evaluate function f at pr[0] and return the determinant of the resulting matrix.
+    """
     mat = f(pr[0])
     temp = np.array(mat).astype(np.float64)
     return np.linalg.det(temp)
 
-# Function to obtain critical p_rr values for homophily combinations (h1, h2) and probability combinations (p_rb, p_bb) in combinationsh and combinationsp
+
 def critical_prr(combinationsh, combinationsp, N, Nr, M, alpha, c1, c2):
+    """
+    Find critical p_rr values for combinations of homophily and edge probabilities.
+    Returns a list of tuples (critical p_rr, h1, h2, p_rb, p_bb).
+    """
     critical_probabilities = []
-    for (h2,h1) in combinationsh:
+    for (h2, h1) in combinationsh:
         F1 = F_maximum_entropy(c1, h1, Nr / N)
         F2 = F_maximum_entropy(c2, h2, Nr / N)
-        for (prb,pbb) in combinationsp:
-            mat2 = B_matrix(F1, F2, p_rr, prb, pbb,  N, Nr, alpha*M, (1-alpha)*M) - sp.eye(2 * (c1 + c2 + 2))
-            root = fsolve(determinant_matrix_red, x0 = 0.2, args = mat2)
-            quality = determinant_matrix_red(root,mat2)
-            if root>0 and root<1 and abs(quality)<1e-10:
-                critical_probabilities.append((root[0], h1, h2, prb, pbb))      #the critical probability p_rr (root[0]) for given h1, h2, p_bb, p_rb
+        for (prb, pbb) in combinationsp:
+            mat2 = B_matrix(F1, F2, p_rr, prb, pbb, N, Nr, alpha * M, (1 - alpha) * M) - sp.eye(2 * (c1 + c2 + 2))
+            root = fsolve(determinant_matrix_red, x0=0.2, args=mat2)
+            quality = determinant_matrix_red(root, mat2)
+            if root > 0 and root < 1 and abs(quality) < 1e-10:
+                critical_probabilities.append((root[0], h1, h2, prb, pbb))
     return critical_probabilities
 
-def findroot(f, x0 = 0.8):
+
+def findroot(f, x0=0.8):
+    """
+    Find a root of the determinant function f using fsolve, and check if the corresponding eigenvector is valid.
+    """
     prb = np.nan
-    root = fsolve(determinant_matrix_f, x0, args = f)
-    quality = determinant_matrix_f(root,f)
-    if root>0 and root<1 and abs(quality)<1e-5:
+    root = fsolve(determinant_matrix_f, x0, args=f)
+    quality = determinant_matrix_f(root, f)
+    if root > 0 and root < 1 and abs(quality) < 1e-5:
         eigenvals, eigenvecs = np.linalg.eig(np.array(f(root[0])).astype(np.float64))
-        # Find the eigenvector corresponding to the eigenvalue zero
         zero_eigenvalue_index = np.where(np.isclose(eigenvals, 0))[0]
         if zero_eigenvalue_index.size > 0:
             zero_eigenvector = eigenvecs[:, zero_eigenvalue_index[0]]
@@ -352,14 +433,16 @@ def findroot(f, x0 = 0.8):
                 prb = root[0]
     return prb
 
+
 def chachematrix(c, p_rr, p_bb, p_rb):
-    # Create cache matrices for clique_perc_avg_color outcomes
+    """
+    Precompute and cache clique_perc_avg_color values for all possible clique compositions.
+    Returns four arrays for each color combination.
+    """
     cache_rr = sp.zeros(c + 1)
     cache_br = sp.zeros(c + 1)
     cache_rb = sp.zeros(c + 1)
     cache_bb = sp.zeros(c + 1)
-
-    # Populate the cache matrices
     for i in range(c + 1):
         cache_rr[i] = clique_perc_avg_color(i, c - i, p_rr, p_bb, p_rb, 'r', 'r')
         cache_br[i] = clique_perc_avg_color(i, c - i, p_rr, p_bb, p_rb, 'b', 'r')
@@ -368,45 +451,49 @@ def chachematrix(c, p_rr, p_bb, p_rb):
     return cache_rr, cache_br, cache_rb, cache_bb
 
 
-def getslice(h1_values,h2_values, p_rr, p_bb, p_rb, N, Nr, M, alpha, c1, c2,xzero = 0.1):
+
+def getslice(h1_values, h2_values, p_rr, p_bb, p_rb, N, Nr, M, alpha, c1, c2, xzero=0.1):
+    """
+    For given ranges of h1 and h2, compute the critical p_rr values and corresponding homophily values.
+    Returns lists of critical probabilities and homophily values.
+    """
     p_rr_crit = []
     hom = []
     if len(h1_values) == 1:
         h1 = h1_values[0]
         F1 = F_maximum_entropy(c1, h1, Nr / N)
         for i, h2 in enumerate(h2_values):
-            F2 = F_maximum_entropy(c2, h2, Nr/N)
-            mat = B_matrix(F1, F2, p_rr, p_bb, p_rb, N, Nr, alpha*M, (1-alpha)*M) - sp.eye(2 * (c1 + c2 + 2))
+            F2 = F_maximum_entropy(c2, h2, Nr / N)
+            mat = B_matrix(F1, F2, p_rr, p_bb, p_rb, N, Nr, alpha * M, (1 - alpha) * M) - sp.eye(2 * (c1 + c2 + 2))
             f = sp.lambdify(p_rr, mat)
-            p_rr_crit.append( findroot(f, xzero))
-            hom.append( alpha*h1+(1-alpha)*h2)
+            p_rr_crit.append(findroot(f, xzero))
+            hom.append(alpha * h1 + (1 - alpha) * h2)
             xzero = p_rr_crit[-1]
-            print(alpha*h1+(1-alpha)*h2,h1,h2,p_rr_crit[-1])
+            print(alpha * h1 + (1 - alpha) * h2, h1, h2, p_rr_crit[-1])
     elif len(h2_values) == 1:
         h2 = h2_values[0]
         F2 = F_maximum_entropy(c2, h2, Nr / N)
         for i, h1 in enumerate(h1_values):
-            F1 = F_maximum_entropy(c1, h1, Nr/N)
-            mat = B_matrix(F1, F2, p_rr, p_bb, p_rb, N, Nr, alpha*M, (1-alpha)*M) - sp.eye(2 * (c1 + c2 + 2))
+            F1 = F_maximum_entropy(c1, h1, Nr / N)
+            mat = B_matrix(F1, F2, p_rr, p_bb, p_rb, N, Nr, alpha * M, (1 - alpha) * M) - sp.eye(2 * (c1 + c2 + 2))
             f = sp.lambdify(p_rr, mat)
-            p_rr_crit.append( findroot(f, xzero))
-            hom.append( alpha*h1+(1-alpha)*h2)
-            xzero=p_rr_crit[-1]
-            print(alpha*h1+(1-alpha)*h2,h1,h2,p_rr_crit[-1])
+            p_rr_crit.append(findroot(f, xzero))
+            hom.append(alpha * h1 + (1 - alpha) * h2)
+            xzero = p_rr_crit[-1]
+            print(alpha * h1 + (1 - alpha) * h2, h1, h2, p_rr_crit[-1])
     elif len(h1_values) == len(h2_values):
         for i, h1 in enumerate(h1_values):
             h2 = h2_values[i]
             F2 = F_maximum_entropy(c2, h2, Nr / N)
-            F1 = F_maximum_entropy(c1, h1, Nr/N)
-            mat = B_matrix(F1, F2, p_rr, p_bb, p_rb, N, Nr, alpha*M, (1-alpha)*M) - sp.eye(2 * (c1 + c2 + 2))
+            F1 = F_maximum_entropy(c1, h1, Nr / N)
+            mat = B_matrix(F1, F2, p_rr, p_bb, p_rb, N, Nr, alpha * M, (1 - alpha) * M) - sp.eye(2 * (c1 + c2 + 2))
             f = sp.lambdify(p_rr, mat)
-            p_rr_crit.append( findroot(f, xzero))
-            hom.append( alpha*h1+(1-alpha)*h2)
-            xzero=p_rr_crit[-1]
-            print(alpha*h1+(1-alpha)*h2,h1,h2,p_rr_crit[-1])
+            p_rr_crit.append(findroot(f, xzero))
+            hom.append(alpha * h1 + (1 - alpha) * h2)
+            xzero = p_rr_crit[-1]
+            print(alpha * h1 + (1 - alpha) * h2, h1, h2, p_rr_crit[-1])
     else:
         print('Error, this is not a slice')
-
     return p_rr_crit, hom
 # ------------------------------------------------------------------------
 # Main Execution
@@ -437,7 +524,7 @@ h_values = np.linspace(0, 0.6, 30)
 results = np.zeros((len(prb_values), len(h_values)))
 
 x0 = 0.3
-# Loop over the ranges of prb and p_bb
+# Loop over the ranges of prb and h
 for i, prb in enumerate(prb_values):
     for j, h in enumerate(h_values):
         h2val1 = (h-alpha*homsliceval)/(1-alpha)

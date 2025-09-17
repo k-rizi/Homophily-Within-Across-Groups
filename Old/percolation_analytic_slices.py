@@ -473,7 +473,7 @@ plt.legend()
 plt.tight_layout()
 
 # Save the figure
-plt.savefig('figs/slice_divided'+'_N_'+str(c1)+'_alpha_' +str(alpha)+ 'prb'+str(prb)+ '.pdf')
+plt.savefig('figs/slice_divided'+'_N_'+str(c1)+'_alpha_' +str(alpha)+ 'prb'+str(prb)+ '1.pdf')
 plt.show()
 
 
