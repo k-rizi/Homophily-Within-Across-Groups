@@ -14,5 +14,4 @@ The scripts and notebooks here reproduce the main analyses and figures from the 
 > Please download those datasets and place them in the `/data` directory before running the analyses.
 
 ---
-
-## This project requires **Python 3.12+.
+ This project requires Python 3.12+.
