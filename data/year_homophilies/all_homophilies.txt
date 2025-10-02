@@ -1,0 +1,266 @@
+If you have the Facebook data, with the following code you can generate the data for homophilies here.
+
+import networkx as nx
+import numpy as np
+import os
+import json
+import matplotlib.pyplot as plt
+from itertools import combinations
+from scipy.special import comb
+
+def get_color_fractions(G):
+    """
+    Identifies unique colors in the network and computes the fraction of each color.
+    """
+    color_counts = {}
+    total_nodes = len(G)
+
+    for _, data in G.nodes(data=True):
+        color = data.get('color', None)
+        if color:
+            color_counts[color] = color_counts.get(color, 0) + 1
+
+    color_fractions = {color: count / total_nodes for color, count in color_counts.items()}
+    color_indices = {color: idx for idx, color in enumerate(color_fractions.keys())}
+
+    return color_fractions, color_indices
+
+def compute_homophily_value(F, c, n_colors):
+    """
+    Computes the homophily value for a given clique size with multiple colors.
+    """
+    h_c = 0
+    n_values = np.array(list(n_colors.values()))
+    
+    for i_vector, freq in F.items():
+        intra_group_edges = sum(comb(i, 2) for i in i_vector)
+        clique_homophily = intra_group_edges / comb(c, 2) if c > 1 else 0
+        h_c_contribution = (clique_homophily - np.sum(n_values**2)) / (1 - np.sum(n_values**2))
+        h_c += freq * h_c_contribution
+
+    return max(-1, min(1, h_c))
+
+def compute_clique_homophily_distributions(subgraphs_by_size, cliques_by_size, n_colors):
+    """
+    Computes clique homophily distributions and homophily values for different clique sizes.
+    """
+    distributions = {}
+    homophily_values = {}
+    total_cliques_by_size = {}
+
+    for size, subgraph in subgraphs_by_size.items():
+        F = {}
+
+        for clique in cliques_by_size[size]:
+            color_vector = [0] * len(n_colors)
+            for node in clique:
+                node_color = subgraph.nodes[node].get('color', None)
+                if node_color in n_colors:
+                    color_vector[list(n_colors.keys()).index(node_color)] += 1
+
+            color_tuple = tuple(color_vector)
+            F[color_tuple] = F.get(color_tuple, 0) + 1  
+
+        total_cliques = sum(F.values())
+        total_cliques_by_size[size] = total_cliques
+
+        if total_cliques > 0:
+            for key in F:
+                F[key] /= total_cliques  
+        distributions[size] = F
+
+        h_c = compute_homophily_value(F, size, n_colors)
+        homophily_values[size] = h_c
+
+    return distributions, homophily_values, total_cliques_by_size
+
+def assign_year_based_colors(G):
+    for node, data in G.nodes(data=True):
+        year = data.get('year', None)  # Get year attribute, default to None if missing
+        if year is not None:
+            if year < 2000:
+                G.nodes[node]['color'] = 'color0'  # Before 2000
+            elif 2001 <= year <= 2010:
+                G.nodes[node]['color'] = f'color{year - 2000}'  # Assign color1 to color10
+            else:
+                G.nodes[node]['color'] = 'color11'  # After 2010
+                
+def filter_colored_graph(G):
+    nodes_to_remove = [node for node, data in G.nodes(data=True) if not data.get("status") == 1]
+    G.remove_nodes_from(nodes_to_remove)
+    nodes_to_remove = [node for node, data in G.nodes(data=True) if not 1887 <= data.get("year") <= 2010]
+    G.remove_nodes_from(nodes_to_remove)
+    isolated_nodes = list(nx.isolates(G))
+    G.remove_nodes_from(isolated_nodes)
+    assign_year_based_colors(G)
+    new_labels = {old_label: str(new_index) for new_index, old_label in enumerate(G.nodes())}
+    G = nx.relabel_nodes(G, new_labels)
+    return G
+
+def plot_homophily_vs_clique_size(G, num_bootstrap=1000, fig_name='multicolor'):
+    """
+    Computes and plots homophily vs. clique size for a multi-color network with confidence intervals.
+    """
+
+    filename = f"figs/homophily_vs_clique_size_{fig_name}.pdf"
+    if not os.path.exists('figs'):
+        os.makedirs('figs')
+
+    N = len(G)
+    n_colors, color_indices = get_color_fractions(G)
+
+    print(f"{N} nodes with {len(n_colors)} colors detected")
+    for color, fraction in n_colors.items():
+        print(f"{color}: {fraction:.2%} of nodes")
+
+    maximal_cliques = list(nx.find_cliques(G))
+    clique_sizes = set(len(clique) for clique in maximal_cliques)
+
+    cliques_by_size = {size: [] for size in clique_sizes}
+    for clique in maximal_cliques:
+        cliques_by_size[len(clique)].append(clique)
+
+    subgraphs_by_size = {}
+    for size, cliques in cliques_by_size.items():
+        subgraph = nx.Graph()
+        for clique in cliques:
+            subgraph.add_edges_from(combinations(clique, 2))
+            for node in clique:
+                if node in G.nodes:
+                    subgraph.nodes[node].update(G.nodes[node])
+        subgraphs_by_size[size] = subgraph
+
+    distributions, homophily_values, total_cliques_by_size = compute_clique_homophily_distributions(
+        subgraphs_by_size, cliques_by_size, n_colors)
+
+    homophily_means = {}
+    homophily_lowers = {}
+    homophily_uppers = {}
+
+    for c in sorted(clique_sizes):
+        F = distributions[c]
+        n_c = total_cliques_by_size[c]
+        if n_c > 0:
+            h_mean, h_lower, h_upper = bootstrap_homophily(F, c, n_c, n_colors, num_bootstrap=num_bootstrap)
+            homophily_means[c] = h_mean
+            homophily_lowers[c] = h_lower
+            homophily_uppers[c] = h_upper
+        else:
+            homophily_means[c] = homophily_values[c]
+            homophily_lowers[c] = homophily_values[c]
+            homophily_uppers[c] = homophily_values[c]
+
+    np.save(fig_name+'_homophily_means', homophily_means)
+    np.save(fig_name+'_homophily_lowers', homophily_lowers)
+    np.save(fig_name+'_homophily_uppers', homophily_uppers)
+
+    plt.figure(figsize=(10, 5))
+    clique_sizes_sorted = sorted(clique_sizes)
+    homophily_values_list = [homophily_means[c] for c in clique_sizes_sorted]
+    error_lower = [homophily_means[c] - homophily_lowers[c] for c in clique_sizes_sorted]
+    error_upper = [homophily_uppers[c] - homophily_means[c] for c in clique_sizes_sorted]
+
+    plt.errorbar(clique_sizes_sorted, homophily_values_list, yerr=[error_lower, error_upper], 
+                 fmt='o-', color='purple', ecolor='gray', capsize=5, elinewidth=2, 
+                 markeredgewidth=2, label='Homophily with 95% CI')
+
+    plt.xlabel('Clique Size')
+    plt.ylabel('Homophily $h_c$')
+    plt.grid(True)
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(filename)
+    plt.show()
+
+
+def compute_homophily_value(F, c, n_colors):
+    """Computes the homophily value for a given clique size with multiple colors."""
+    h_c = 0
+    n_values = np.array(list(n_colors.values()))
+    
+    for i_vector, freq in F.items():
+        intra_group_edges = sum(comb(i, 2) for i in i_vector)
+        clique_homophily = intra_group_edges / comb(c, 2) if c > 1 else 0
+        h_c_contribution = (clique_homophily - np.sum(n_values**2)) / (1 - np.sum(n_values**2))
+        h_c += freq * h_c_contribution
+
+    return max(-1, min(1, h_c))
+
+def compute_clique_homophily_distributions(subgraphs_by_size, cliques_by_size, n_colors):
+    """Computes clique homophily distributions and homophily values for different clique sizes."""
+    distributions = {}
+    homophily_values = {}
+    total_cliques_by_size = {}
+
+    for size, subgraph in subgraphs_by_size.items():
+        F = {}
+
+        for clique in cliques_by_size[size]:
+            color_vector = [0] * len(n_colors)
+            for node in clique:
+                node_color = subgraph.nodes[node].get('color', None)
+                if node_color in n_colors:
+                    color_vector[list(n_colors.keys()).index(node_color)] += 1
+
+            color_tuple = tuple(color_vector)
+            F[color_tuple] = F.get(color_tuple, 0) + 1  
+
+        total_cliques = sum(F.values())
+        total_cliques_by_size[size] = total_cliques
+
+        if total_cliques > 0:
+            for key in F:
+                F[key] /= total_cliques  
+        distributions[size] = F
+
+        h_c = compute_homophily_value(F, size, n_colors)
+        homophily_values[size] = h_c
+
+    return distributions, homophily_values, total_cliques_by_size
+
+def process_network(G, prefix):
+    """Processes a network, computes homophily values, and stores them in a JSON file."""
+    n_colors, color_indices = get_color_fractions(G)
+
+    maximal_cliques = list(nx.find_cliques(G))
+    clique_sizes = set(len(clique) for clique in maximal_cliques)
+
+    cliques_by_size = {size: [] for size in clique_sizes}
+    for clique in maximal_cliques:
+        cliques_by_size[len(clique)].append(clique)
+
+    subgraphs_by_size = {}
+    for size, cliques in cliques_by_size.items():
+        subgraph = nx.Graph()
+        for clique in cliques:
+            subgraph.add_edges_from(combinations(clique, 2))
+            for node in clique:
+                if node in G.nodes:
+                    subgraph.nodes[node].update(G.nodes[node])
+        subgraphs_by_size[size] = subgraph
+
+    _, homophily_values, _ = compute_clique_homophily_distributions(subgraphs_by_size, cliques_by_size, n_colors)
+    
+    homophily_data = {
+        "clique_sizes": sorted(list(clique_sizes)),
+        "homophily_values": homophily_values
+    }
+    
+    os.makedirs("generated_data4/homophilies", exist_ok=True)
+    homophily_file = os.path.join("generated_data4/homophilies", f"{prefix}_homophily.json")
+    with open(homophily_file, 'w') as f:
+        json.dump(homophily_data, f)
+
+def main(networks_directory):
+    homophilies = {}
+    for file_name in os.listdir(networks_directory):
+        if file_name.endswith('.graphml'):
+            prefix = file_name.split('.')[0]
+            print('\nProcessing:', prefix)
+            file_path = os.path.join(networks_directory, file_name)
+            G = nx.read_graphml(file_path)
+            G = filter_colored_graph(G)
+            #plot_homophily_vs_clique_size(G, num_bootstrap=1000, fig_name='multicolor')
+            process_network(G, prefix)
+
+main('/scratch/cs/networks/data/facebook100/processed_data/networks_with')
